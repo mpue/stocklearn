@@ -8,25 +8,30 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  username  String   @unique
-  password  String
-  games     Game[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id @default(uuid())
+  email         String   @unique
+  username      String   @unique
+  password      String
+  gamesAsWhite  Game[]   @relation("WhitePlayer")
+  gamesAsBlack  Game[]   @relation("BlackPlayer")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model Game {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  pgn       String   @default("")
-  fen       String   @default("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
-  status    String   @default("active") // active, checkmate, stalemate, draw, resigned
-  moves     Move[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(uuid())
+  gameType       String   @default("vs_stockfish") // vs_stockfish, vs_player
+  whitePlayerId  String
+  whitePlayer    User     @relation("WhitePlayer", fields: [whitePlayerId], references: [id], onDelete: Cascade)
+  blackPlayerId  String?
+  blackPlayer    User?    @relation("BlackPlayer", fields: [blackPlayerId], references: [id], onDelete: Cascade)
+  pgn            String   @default("")
+  fen            String   @default("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
+  currentTurn    String   @default("w") // w or b
+  status         String   @default("active") // active, checkmate, stalemate, draw, resigned, waiting
+  moves          Move[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model Move {

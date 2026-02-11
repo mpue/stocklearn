@@ -24,6 +24,10 @@ export interface Game {
   pgn: string;
   fen: string;
   status: string;
+  gameType: 'vs_stockfish' | 'vs_player';
+  currentTurn: 'w' | 'b';
+  whitePlayer?: { id: string; username: string };
+  blackPlayer?: { id: string; username: string };
   moves?: Move[];
   createdAt: string;
   updatedAt: string;
@@ -98,14 +102,41 @@ export const api = {
     localStorage.removeItem('authToken');
   },
 
-  async createGame(): Promise<Game> {
+  async createGame(gameType: 'vs_stockfish' | 'vs_player' = 'vs_stockfish', opponentId?: string): Promise<Game> {
     const response = await fetch(`${API_URL}/api/games`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ gameType, opponentId }),
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to create game');
+    }
+    
+    return response.json();
+  },
+
+  async joinGame(gameId: string): Promise<Game> {
+    const response = await fetch(`${API_URL}/api/games/${gameId}/join`, {
       method: 'POST',
       headers: getAuthHeaders(),
     });
     
     if (!response.ok) {
-      throw new Error('Failed to create game');
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to join game');
+    }
+    
+    return response.json();
+  },
+
+  async getAvailableGames(): Promise<Game[]> {
+    const response = await fetch(`${API_URL}/api/games/available/pvp`, {
+      headers: getAuthHeaders(),
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch available games');
     }
     
     return response.json();

@@ -191,6 +191,25 @@
   background: #5568d3;
 }
 
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.3);
+  color: white;
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.game-type-selector {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 25px;
+}
+
+.game-type-selector .btn {
+  flex: 1;
+}
+
 /* Games List */
 .games-grid {
   display: grid;
@@ -252,13 +271,36 @@
   color: white;
 }
 
+.badge-waiting {
+  background: #17a2b8;
+  color: white;
+}
+
 .game-info {
   margin-bottom: 15px;
   color: #666;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .game-moves {
   font-size: 0.95rem;
+}
+
+.game-players {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.game-mode {
+  font-size: 0.95rem;
+  font-style: italic;
+}
+
+.game-player {
+  font-weight: 600;
+  color: #333;
 }
 
 .game-actions {

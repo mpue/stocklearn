@@ -1,4 +1,6 @@
 import express from 'express';
+import { createServer } from 'http';
+import { Server as SocketIOServer } from 'socket.io';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
@@ -10,6 +12,13 @@ import { authenticateToken, generateToken, AuthRequest } from './middleware/auth
 dotenv.config();
 
 const app = express();
+const httpServer = createServer(app);
+const io = new SocketIOServer(httpServer, {
+  cors: {
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    methods: ['GET', 'POST']
+  }
+});
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3001;
 
@@ -140,15 +149,110 @@ app.get('/api/auth/me', authenticateToken, async (req: AuthRequest, res) => {
 // Neues Spiel erstellen
 app.post('/api/games', authenticateToken, async (req: AuthRequest, res) => {
   try {
+    const { gameType = 'vs_stockfish', opponentId } = req.body;
+    
+    const gameData: any = {
+      gameType,
+      whitePlayerId: req.userId!,
+    };
+
+    // Bei vs_player: wenn opponentId gegeben, direkt zuweisen, sonst status = waiting
+    if (gameType === 'vs_player') {
+      if (opponentId) {
+        gameData.blackPlayerId = opponentId;
+        gameData.status = 'active';
+      } else {
+        gameData.status = 'waiting'; // Wartet auf Gegner
+      }
+    }
+
     const game = await prisma.game.create({
-      data: {
-        userId: req.userId!
-      },
+      data: gameData,
+      include: {
+        whitePlayer: { select: { id: true, username: true } },
+        blackPlayer: { select: { id: true, username: true } }
+      }
     });
     res.json(game);
   } catch (error) {
     console.error('Error creating game:', error);
     res.status(500).json({ error: 'Failed to create game' });
+  }
+});
+
+// PvP Spiel beitreten
+app.post('/api/games/:id/join', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    
+    const game = await prisma.game.findUnique({
+      where: { id }
+    });
+
+    if (!game) {
+      return res.status(404).json({ error: 'Game not found' });
+    }
+
+    if (game.gameType !== 'vs_player') {
+      return res.status(400).json({ error: 'Can only join player vs player games' });
+    }
+
+    if (game.status !== 'waiting') {
+      return res.status(400).json({ error: 'Game is not waiting for players' });
+    }
+
+    if (game.whitePlayerId === req.userId) {
+      return res.status(400).json({ error: 'Cannot join your own game' });
+    }
+
+    if (game.blackPlayerId) {
+      return res.status(400).json({ error: 'Game already has two players' });
+    }
+
+    const updatedGame = await prisma.game.update({
+      where: { id },
+      data: {
+        blackPlayerId: req.userId,
+        status: 'active'
+      },
+      include: {
+        moves: {
+          orderBy: { createdAt: 'asc' }
+        },
+        whitePlayer: { select: { id: true, username: true } },
+        blackPlayer: { select: { id: true, username: true } }
+      }
+    });
+
+    // WebSocket-Event: Benachrichtige wartenden Spieler dass jemand beigetreten ist
+    io.to(`game:${id}`).emit('player-joined', updatedGame);
+
+    res.json(updatedGame);
+  } catch (error) {
+    console.error('Error joining game:', error);
+    res.status(500).json({ error: 'Failed to join game' });
+  }
+});
+
+// Verfügbare PvP Spiele laden
+app.get('/api/games/available/pvp', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const games = await prisma.game.findMany({
+      where: {
+        gameType: 'vs_player',
+        status: 'waiting',
+        whitePlayerId: { not: req.userId } // Nicht eigene Spiele
+      },
+      include: {
+        whitePlayer: { select: { id: true, username: true } }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20
+    });
+    res.json(games);
+  } catch (error) {
+    console.error('Error fetching available games:', error);
+    res.status(500).json({ error: 'Failed to fetch available games' });
   }
 });
 
@@ -161,7 +265,9 @@ app.get('/api/games/:id', authenticateToken, async (req: AuthRequest, res) => {
       include: {
         moves: {
           orderBy: { createdAt: 'asc' }
-        }
+        },
+        whitePlayer: { select: { id: true, username: true } },
+        blackPlayer: { select: { id: true, username: true } }
       }
     });
     
@@ -169,8 +275,9 @@ app.get('/api/games/:id', authenticateToken, async (req: AuthRequest, res) => {
       return res.status(404).json({ error: 'Game not found' });
     }
 
-    // Prüfen ob Spiel dem User gehört
-    if (game.userId !== req.userId) {
+    // Prüfen ob User am Spiel beteiligt ist
+    const isParticipant = game.whitePlayerId === req.userId || game.blackPlayerId === req.userId;
+    if (!isParticipant) {
       return res.status(403).json({ error: 'Access denied' });
     }
     
@@ -187,9 +294,6 @@ app.post('/api/games/:id/move', authenticateToken, async (req: AuthRequest, res)
     const { id } = req.params;
     const { from, to, promotion } = req.body;
     
-    // Skill Level aus Request holen, default 10
-    const skillLevel = req.body.skillLevel || 10;
-
     const game = await prisma.game.findUnique({
       where: { id },
       include: { moves: true }
@@ -199,8 +303,11 @@ app.post('/api/games/:id/move', authenticateToken, async (req: AuthRequest, res)
       return res.status(404).json({ error: 'Game not found' });
     }
 
-    // Prüfen ob Spiel dem User gehört
-    if (game.userId !== req.userId) {
+    // Prüfen ob User am Spiel beteiligt ist
+    const isWhitePlayer = game.whitePlayerId === req.userId;
+    const isBlackPlayer = game.blackPlayerId === req.userId;
+    
+    if (!isWhitePlayer && !isBlackPlayer) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -209,6 +316,22 @@ app.post('/api/games/:id/move', authenticateToken, async (req: AuthRequest, res)
     }
 
     const chess = new Chess(game.fen);
+    const currentTurn = chess.turn(); // 'w' or 'b'
+
+    // Bei vs_player: Prüfen ob der Spieler am Zug ist
+    if (game.gameType === 'vs_player') {
+      if (currentTurn === 'w' && !isWhitePlayer) {
+        return res.status(400).json({ error: 'Not your turn' });
+      }
+      if (currentTurn === 'b' && !isBlackPlayer) {
+        return res.status(400).json({ error: 'Not your turn' });
+      }
+    }
+
+    // Bei vs_stockfish: Nur Weiß (Spieler) darf ziehen
+    if (game.gameType === 'vs_stockfish' && currentTurn !== 'w') {
+      return res.status(400).json({ error: 'Not your turn' });
+    }
     
     // Spieler-Zug ausführen
     const moveResult = chess.move({ from, to, promotion });
@@ -218,7 +341,7 @@ app.post('/api/games/:id/move', authenticateToken, async (req: AuthRequest, res)
     }
 
     // Spieler-Zug speichern
-    await prisma.move.create({
+    const playerMove = await prisma.move.create({
       data: {
         gameId: id,
         from: moveResult.from,
@@ -235,7 +358,7 @@ app.post('/api/games/:id/move', authenticateToken, async (req: AuthRequest, res)
     let status = 'active';
     if (chess.isCheckmate()) {
       status = 'checkmate';
-      console.log('Checkmate detected after player move - Player wins!');
+      console.log('Checkmate detected after player move');
     } else if (chess.isStalemate()) {
       status = 'stalemate';
       console.log('Stalemate detected');
@@ -244,10 +367,11 @@ app.post('/api/games/:id/move', authenticateToken, async (req: AuthRequest, res)
       console.log('Draw detected');
     }
 
-    // Stockfish-Zug berechnen (wenn Spiel noch aktiv)
+    // Stockfish-Zug berechnen (nur bei vs_stockfish und wenn Spiel noch aktiv)
     let stockfishMove = null;
-    if (status === 'active') {
+    if (game.gameType === 'vs_stockfish' && status === 'active') {
       try {
+        const skillLevel = req.body.skillLevel || 10;
         const bestMove = await stockfishEngine.getBestMove(chess.fen(), skillLevel);
         
         // Stockfish-Zug ausführen
@@ -274,7 +398,7 @@ app.post('/api/games/:id/move', authenticateToken, async (req: AuthRequest, res)
           // Status erneut prüfen nach Stockfish-Zug
           if (chess.isCheckmate()) {
             status = 'checkmate';
-            console.log('Checkmate detected after Stockfish move - Stockfish wins!');
+            console.log('Checkmate detected after Stockfish move');
           } else if (chess.isStalemate()) {
             status = 'stalemate';
             console.log('Stalemate detected after Stockfish move');
@@ -294,13 +418,22 @@ app.post('/api/games/:id/move', authenticateToken, async (req: AuthRequest, res)
       data: {
         fen: chess.fen(),
         pgn: chess.pgn(),
+        currentTurn: chess.turn(),
         status
       },
       include: {
         moves: {
           orderBy: { createdAt: 'asc' }
-        }
+        },
+        whitePlayer: { select: { id: true, username: true } },
+        blackPlayer: { select: { id: true, username: true } }
       }
+    });
+
+    // WebSocket-Event für Echtzeit-Updates
+    io.to(`game:${id}`).emit('game-updated', {
+      game: updatedGame,
+      stockfishMove
     });
 
     res.json({
@@ -317,11 +450,18 @@ app.post('/api/games/:id/move', authenticateToken, async (req: AuthRequest, res)
 app.get('/api/games', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const games = await prisma.game.findMany({
-      where: { userId: req.userId },
+      where: {
+        OR: [
+          { whitePlayerId: req.userId },
+          { blackPlayerId: req.userId }
+        ]
+      },
       orderBy: { createdAt: 'desc' },
       take: 20,
       include: {
-        moves: true
+        moves: true,
+        whitePlayer: { select: { id: true, username: true } },
+        blackPlayer: { select: { id: true, username: true } }
       }
     });
     res.json(games);
@@ -349,8 +489,9 @@ app.post('/api/games/:id/analyze', authenticateToken, async (req: AuthRequest, r
       return res.status(404).json({ error: 'Game not found' });
     }
 
-    // Prüfen ob Spiel dem User gehört
-    if (game.userId !== req.userId) {
+    // Prüfen ob User am Spiel beteiligt ist
+    const isParticipant = game.whitePlayerId === req.userId || game.blackPlayerId === req.userId;
+    if (!isParticipant) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -443,8 +584,9 @@ app.post('/api/games/:id/resign', authenticateToken, async (req: AuthRequest, re
       return res.status(404).json({ error: 'Game not found' });
     }
 
-    // Prüfen ob Spiel dem User gehört
-    if (game.userId !== req.userId) {
+    // Prüfen ob User am Spiel beteiligt ist
+    const isParticipant = game.whitePlayerId === req.userId || game.blackPlayerId === req.userId;
+    if (!isParticipant) {
       return res.status(403).json({ error: 'Access denied' });
     }
     
@@ -475,8 +617,9 @@ app.delete('/api/games/:id', authenticateToken, async (req: AuthRequest, res) =>
       return res.status(404).json({ error: 'Game not found' });
     }
 
-    // Prüfen ob Spiel dem User gehört
-    if (game.userId !== req.userId) {
+    // Prüfen ob User am Spiel beteiligt ist
+    const isParticipant = game.whitePlayerId === req.userId || game.blackPlayerId === req.userId;
+    if (!isParticipant) {
       return res.status(403).json({ error: 'Access denied' });
     }
     
@@ -497,8 +640,30 @@ app.delete('/api/games/:id', authenticateToken, async (req: AuthRequest, res) =>
   }
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+// WebSocket-Handler für Echtzeit-Updates
+io.on('connection', (socket) => {
+  console.log('Client connected:', socket.id);
+
+  // Join game room
+  socket.on('join-game', (gameId: string) => {
+    socket.join(`game:${gameId}`);
+    console.log(`Socket ${socket.id} joined game ${gameId}`);
+  });
+
+  // Leave game room
+  socket.on('leave-game', (gameId: string) => {
+    socket.leave(`game:${gameId}`);
+    console.log(`Socket ${socket.id} left game ${gameId}`);
+  });
+
+  socket.on('disconnect', () => {
+    console.log('Client disconnected:', socket.id);
+  });
+});
+
+httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Backend server running on http://0.0.0.0:${PORT}`);
+  console.log(`🔌 WebSocket server ready`);
 });
 
 // Graceful shutdown

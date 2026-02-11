@@ -1,14 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Chess } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
-import { api, Game } from '../api/client';
+import { useAuth } from '../contexts/AuthContext';
+import { useSocket } from '../contexts/SocketContext';
+import { api, Game as ApiGame } from '../api/client';
 import './ChessGame.css';
 
 export function ChessGame() {
   const { gameId: urlGameId } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { socket } = useSocket();
   const [game, setGame] = useState<Chess>(new Chess());
+  const [gameData, setGameData] = useState<ApiGame | null>(null);
   const [gameId, setGameId] = useState<string | null>(urlGameId || null);
   const [status, setStatus] = useState<string>('Lade Spiel...');
   const [gameStatus, setGameStatus] = useState<string>('active');
@@ -24,11 +29,86 @@ export function ChessGame() {
     }
   }, [urlGameId]);
 
+  // WebSocket: Join game room
+  useEffect(() => {
+    if (!socket || !gameId) return;
+
+    socket.emit('join-game', gameId);
+    console.log('Joined game room:', gameId);
+
+    return () => {
+      socket.emit('leave-game', gameId);
+    };
+  }, [socket, gameId]);
+
+  // WebSocket: Listen for game updates
+  useEffect(() => {
+    if (!socket || !gameId) return;
+
+    const handleGameUpdated = (data: { game: ApiGame; stockfishMove: any }) => {
+      console.log('Game updated via WebSocket');
+      const updatedGame = data.game;
+      
+      setGameData(updatedGame);
+      const chess = new Chess(updatedGame.fen);
+      setGame(chess);
+      
+      if (updatedGame.moves) {
+        const history = updatedGame.moves
+          .sort((a, b) => a.moveNumber - b.moveNumber)
+          .map(m => m.san);
+        setMoveHistory(history);
+      }
+      
+      setGameStatus(updatedGame.status);
+      
+      // Status aktualisieren
+      if (updatedGame.status === 'active' && updatedGame.gameType === 'vs_player') {
+        const isWhite = updatedGame.whitePlayer?.id === user?.id;
+        const isBlack = updatedGame.blackPlayer?.id === user?.id;
+        const isMyTurn = (chess.turn() === 'w' && isWhite) || (chess.turn() === 'b' && isBlack);
+        
+        if (isMyTurn) {
+          setStatus(chess.isCheck() ? 'Schach! Dein Zug!' : 'Dein Zug!');
+        } else {
+          const opponentName = isWhite 
+            ? updatedGame.blackPlayer?.username 
+            : updatedGame.whitePlayer?.username;
+          setStatus(`${opponentName} ist am Zug...`);
+        }
+      } else if (updatedGame.status === 'checkmate' && updatedGame.gameType === 'vs_player') {
+        const winner = chess.turn() === 'w' 
+          ? updatedGame.blackPlayer?.username 
+          : updatedGame.whitePlayer?.username;
+        setStatus(`Schachmatt! ${winner} gewinnt!`);
+      }
+    };
+
+    const handlePlayerJoined = (updatedGame: ApiGame) => {
+      console.log('Player joined via WebSocket');
+      setGameData(updatedGame);
+      setGameStatus(updatedGame.status);
+      
+      if (updatedGame.status === 'active') {
+        setStatus('Spiel beginnt! Weiß ist am Zug.');
+      }
+    };
+
+    socket.on('game-updated', handleGameUpdated);
+    socket.on('player-joined', handlePlayerJoined);
+
+    return () => {
+      socket.off('game-updated', handleGameUpdated);
+      socket.off('player-joined', handlePlayerJoined);
+    };
+  }, [socket, gameId, user?.id]);
+
   const loadGame = async (id: string) => {
     try {
       setStatus('Lade Spiel...');
       const loadedGame = await api.getGame(id);
       setGameId(id);
+      setGameData(loadedGame);
       const chess = new Chess(loadedGame.fen);
       setGame(chess);
       
@@ -41,10 +121,35 @@ export function ChessGame() {
       
       setGameStatus(loadedGame.status);
       
-      if (loadedGame.status === 'active') {
-        setStatus(chess.turn() === 'w' ? 'Dein Zug!' : 'Stockfish ist am Zug...');
+      // Status basierend auf gameType setzen
+      if (loadedGame.status === 'waiting') {
+        setStatus('Wartet auf einen Gegner...');
+      } else if (loadedGame.status === 'active') {
+        if (loadedGame.gameType === 'vs_player') {
+          const isWhite = loadedGame.whitePlayer?.id === user?.id;
+          const isBlack = loadedGame.blackPlayer?.id === user?.id;
+          const isMyTurn = (chess.turn() === 'w' && isWhite) || (chess.turn() === 'b' && isBlack);
+          
+          if (isMyTurn) {
+            setStatus(chess.isCheck() ? 'Schach! Dein Zug!' : 'Dein Zug!');
+          } else {
+            const opponentName = isWhite 
+              ? loadedGame.blackPlayer?.username 
+              : loadedGame.whitePlayer?.username;
+            setStatus(`${opponentName} ist am Zug...`);
+          }
+        } else {
+          setStatus(chess.turn() === 'w' ? 'Dein Zug!' : 'Stockfish ist am Zug...');
+        }
       } else if (loadedGame.status === 'checkmate') {
-        setStatus(chess.turn() === 'w' ? 'Schachmatt! Stockfish gewinnt!' : 'Schachmatt! Du gewinnst!');
+        if (loadedGame.gameType === 'vs_player') {
+          const winner = chess.turn() === 'w' 
+            ? loadedGame.blackPlayer?.username 
+            : loadedGame.whitePlayer?.username;
+          setStatus(`Schachmatt! ${winner} gewinnt!`);
+        } else {
+          setStatus(chess.turn() === 'w' ? 'Schachmatt! Stockfish gewinnt!' : 'Schachmatt! Du gewinnst!');
+        }
       } else {
         setStatus('Spiel beendet: ' + loadedGame.status);
       }
@@ -94,8 +199,24 @@ export function ChessGame() {
   };
 
   const onDrop = async (sourceSquare: string, targetSquare: string) => {
-    if (!gameId || isThinking) {
+    if (!gameId || isThinking || !gameData) {
       return false;
+    }
+
+    // Prüfen ob Spiel aktiv ist
+    if (gameStatus !== 'active') {
+      return false;
+    }
+
+    // Bei PvP: Prüfen ob der User am Zug ist
+    if (gameData.gameType === 'vs_player') {
+      const isWhite = gameData.whitePlayer?.id === user?.id;
+      const isBlack = gameData.blackPlayer?.id === user?.id;
+      const currentTurn = game.turn();
+      
+      if ((currentTurn === 'w' && !isWhite) || (currentTurn === 'b' && !isBlack)) {
+        return false;
+      }
     }
 
     try {
@@ -121,16 +242,21 @@ export function ChessGame() {
 
       // Sofort den Spielerzug anzeigen (optimistic update)
       setGame(gameCopy);
-      // Historie NICHT zwischendurch aktualisieren - nur am Ende mit Backend-Daten
       setIsThinking(true);
-      setStatus('Stockfish denkt nach...');
+      
+      if (gameData.gameType === 'vs_player') {
+        setStatus('Warte auf Gegner...');
+      } else {
+        setStatus('Stockfish denkt nach...');
+      }
 
       // Zug an Backend senden
       const response = await api.makeMove(gameId, sourceSquare, targetSquare, promotion);
       
-      // Spiel mit Stockfish-Antwort aktualisieren
+      // Spiel mit Antwort aktualisieren
       const updatedGame = new Chess(response.game.fen);
       setGame(updatedGame);
+      setGameData(response.game);
 
       // Züge-Historie aus Backend-Daten aktualisieren
       if (response.game.moves && response.game.moves.length > 0) {
@@ -142,21 +268,59 @@ export function ChessGame() {
 
       // Status aktualisieren
       if (response.game.status === 'checkmate') {
-        if (updatedGame.turn() === 'w') {
-          setStatus('Schachmatt! Stockfish gewinnt!');
+        if (response.game.gameType === 'vs_player') {
+          const winner = updatedGame.turn() === 'w' 
+            ? response.game.blackPlayer?.username 
+            : response.game.whitePlayer?.username;
+          setStatus(`Schachmatt! ${winner} gewinnt!`);
         } else {
-          setStatus('Schachmatt! Du gewinnst!');
+          if (updatedGame.turn() === 'w') {
+            setStatus('Schachmatt! Stockfish gewinnt!');
+          } else {
+            setStatus('Schachmatt! Du gewinnst!');
+          }
         }
       } else if (response.game.status === 'stalemate') {
         setStatus('Patt! Das Spiel endet unentschieden.');
       } else if (response.game.status === 'draw') {
         setStatus('Remis!');
       } else if (updatedGame.isCheck()) {
-        setStatus('Schach! Dein Zug.');
+        if (response.game.gameType === 'vs_player') {
+          const isWhite = response.game.whitePlayer?.id === user?.id;
+          const isBlack = response.game.blackPlayer?.id === user?.id;
+          const isMyTurn = (updatedGame.turn() === 'w' && isWhite) || (updatedGame.turn() === 'b' && isBlack);
+          
+          if (isMyTurn) {
+            setStatus('Schach! Dein Zug!');
+          } else {
+            const opponentName = isWhite 
+              ? response.game.blackPlayer?.username 
+              : response.game.whitePlayer?.username;
+            setStatus(`Schach! ${opponentName} ist am Zug...`);
+          }
+        } else {
+          setStatus('Schach! Dein Zug.');
+        }
       } else {
-        setStatus('Dein Zug!');
+        if (response.game.gameType === 'vs_player') {
+          const isWhite = response.game.whitePlayer?.id === user?.id;
+          const isBlack = response.game.blackPlayer?.id === user?.id;
+          const isMyTurn = (updatedGame.turn() === 'w' && isWhite) || (updatedGame.turn() === 'b' && isBlack);
+          
+          if (isMyTurn) {
+            setStatus('Dein Zug!');
+          } else {
+            const opponentName = isWhite 
+              ? response.game.blackPlayer?.username 
+              : response.game.whitePlayer?.username;
+            setStatus(`${opponentName} ist am Zug...`);
+          }
+        } else {
+          setStatus('Dein Zug!');
+        }
       }
 
+      setGameStatus(response.game.status);
       setIsThinking(false);
       return true;
     } catch (error: any) {
@@ -187,7 +351,12 @@ export function ChessGame() {
               onPieceDrop={onDrop}
               boardWidth={560}
               animationDuration={200}
-              arePiecesDraggable={!isThinking}
+              arePiecesDraggable={!isThinking && gameStatus === 'active'}
+              boardOrientation={
+                gameData?.gameType === 'vs_player' && gameData.blackPlayer?.id === user?.id 
+                  ? 'black' 
+                  : 'white'
+              }
               customBoardStyle={{
                 borderRadius: '8px',
                 boxShadow: '0 5px 15px rgba(0, 0, 0, 0.3)',
@@ -215,12 +384,34 @@ export function ChessGame() {
             <div className="info-item">
               <strong>Züge:</strong> {Math.floor(moveHistory.length / 2) + (moveHistory.length % 2)}
             </div>
-            <div className="info-item">
-              <strong>Farbe:</strong> Weiß (unten)
-            </div>
-            <div className="info-item">
-              <strong>Gegner:</strong> Stockfish Engine
-            </div>
+            {gameData?.gameType === 'vs_player' ? (
+              <>
+                <div className="info-item">
+                  <strong>⚪ Weiß:</strong> {gameData.whitePlayer?.username || 'Unbekannt'}
+                </div>
+                <div className="info-item">
+                  <strong>⚫ Schwarz:</strong> {gameData.blackPlayer?.username || 'Wartet...'}
+                </div>
+                <div className="info-item">
+                  <strong>Deine Farbe:</strong> {
+                    gameData.whitePlayer?.id === user?.id 
+                      ? 'Weiß' 
+                      : gameData.blackPlayer?.id === user?.id 
+                        ? 'Schwarz' 
+                        : 'Zuschauer'
+                  }
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="info-item">
+                  <strong>Farbe:</strong> Weiß (unten)
+                </div>
+                <div className="info-item">
+                  <strong>Gegner:</strong> Stockfish Engine
+                </div>
+              </>
+            )}
           </div>
 
           <div className="moves-panel">
