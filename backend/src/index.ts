@@ -98,12 +98,17 @@ app.post('/api/games/:id/move', async (req, res) => {
       }
     });
 
-    // Spiel-Status prüfen
-    let status = game.status;
+    // Spiel-Status prüfen nach Spielerzug
+    let status = 'active';
     if (chess.isCheckmate()) {
       status = 'checkmate';
-    } else if (chess.isDraw() || chess.isStalemate() || chess.isThreefoldRepetition()) {
+      console.log('Checkmate detected after player move - Player wins!');
+    } else if (chess.isStalemate()) {
+      status = 'stalemate';
+      console.log('Stalemate detected');
+    } else if (chess.isDraw() || chess.isThreefoldRepetition() || chess.isInsufficientMaterial()) {
       status = 'draw';
+      console.log('Draw detected');
     }
 
     // Stockfish-Zug berechnen (wenn Spiel noch aktiv)
@@ -136,8 +141,13 @@ app.post('/api/games/:id/move', async (req, res) => {
           // Status erneut prüfen nach Stockfish-Zug
           if (chess.isCheckmate()) {
             status = 'checkmate';
-          } else if (chess.isDraw() || chess.isStalemate() || chess.isThreefoldRepetition()) {
+            console.log('Checkmate detected after Stockfish move - Stockfish wins!');
+          } else if (chess.isStalemate()) {
+            status = 'stalemate';
+            console.log('Stalemate detected after Stockfish move');
+          } else if (chess.isDraw() || chess.isThreefoldRepetition() || chess.isInsufficientMaterial()) {
             status = 'draw';
+            console.log('Draw detected after Stockfish move');
           }
         }
       } catch (error) {

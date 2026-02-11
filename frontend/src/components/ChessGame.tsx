@@ -58,7 +58,7 @@ export function ChessGame() {
 
       // Sofort den Spielerzug anzeigen (optimistic update)
       setGame(gameCopy);
-      setMoveHistory(gameCopy.history());
+      // Historie NICHT zwischendurch aktualisieren - nur am Ende mit Backend-Daten
       setIsThinking(true);
       setStatus('Stockfish denkt nach...');
 
@@ -69,9 +69,13 @@ export function ChessGame() {
       const updatedGame = new Chess(response.game.fen);
       setGame(updatedGame);
 
-      // Züge-Historie aktualisieren
-      const history = updatedGame.history();
-      setMoveHistory(history);
+      // Züge-Historie aus Backend-Daten aktualisieren
+      if (response.game.moves && response.game.moves.length > 0) {
+        const history = response.game.moves
+          .sort((a, b) => a.moveNumber - b.moveNumber)
+          .map(m => m.san);
+        setMoveHistory(history);
+      }
 
       // Status aktualisieren
       if (response.game.status === 'checkmate') {
@@ -80,6 +84,8 @@ export function ChessGame() {
         } else {
           setStatus('Schachmatt! Du gewinnst!');
         }
+      } else if (response.game.status === 'stalemate') {
+        setStatus('Patt! Das Spiel endet unentschieden.');
       } else if (response.game.status === 'draw') {
         setStatus('Remis!');
       } else if (updatedGame.isCheck()) {
@@ -107,15 +113,19 @@ export function ChessGame() {
             <span className="status">{status}</span>
             {isThinking && <span className="thinking">⏳</span>}
           </div>
-          <Chessboard
-            position={game.fen()}
-            onPieceDrop={onDrop}
-            boardWidth={560}
-            customBoardStyle={{
-              borderRadius: '8px',
-              boxShadow: '0 5px 15px rgba(0, 0, 0, 0.3)',
-            }}
-          />
+          <div className="chessboard-wrapper">
+            <Chessboard
+              position={game.fen()}
+              onPieceDrop={onDrop}
+              boardWidth={560}
+              animationDuration={200}
+              arePiecesDraggable={!isThinking}
+              customBoardStyle={{
+                borderRadius: '8px',
+                boxShadow: '0 5px 15px rgba(0, 0, 0, 0.3)',
+              }}
+            />
+          </div>
           <div className="controls">
             <button onClick={startNewGame} disabled={isThinking}>
               Neues Spiel
