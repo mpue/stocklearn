@@ -53,10 +53,12 @@ export const api = {
   },
 
   async makeMove(gameId: string, from: string, to: string, promotion?: string): Promise<MoveResponse> {
+    const skillLevel = parseInt(localStorage.getItem('stockfishSkillLevel') || '10');
+    
     const response = await fetch(`${API_URL}/api/games/${gameId}/move`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from, to, promotion }),
+      body: JSON.stringify({ from, to, promotion, skillLevel }),
     });
     
     if (!response.ok) {
@@ -75,5 +77,42 @@ export const api = {
     }
     
     return response.json();
+  },
+
+  async analyzeGame(gameId: string): Promise<any> {
+    const response = await fetch(`${API_URL}/api/games/${gameId}/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to analyze game');
+    }
+    
+    return response.json();
+  },
+
+  async resignGame(gameId: string): Promise<Game> {
+    const response = await fetch(`${API_URL}/api/games/${gameId}/resign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to resign game');
+    }
+    
+    return response.json();
+  },
+
+  async deleteGame(gameId: string): Promise<void> {
+    const response = await fetch(`${API_URL}/api/games/${gameId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to delete game');
+    }
   },
 };

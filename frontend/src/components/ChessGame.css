@@ -20,6 +20,32 @@
   width: 560px;
 }
 
+.game-header-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.btn-back {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 2px solid white;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-back:hover {
+  background: white;
+  color: #667eea;
+  transform: translateX(-5px);
+}
+
 .chessboard-wrapper {
   width: 560px;
   height: 560px;
@@ -29,7 +55,7 @@
 .board-container h1 {
   color: white;
   font-size: 2.5rem;
-  margin-bottom: 20px;
+  margin-bottom: 0;
   margin-top: 0;
   text-align: center;
   text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
@@ -92,6 +118,15 @@
 .controls button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.btn-resign {
+  background: #dc3545 !important;
+  color: white !important;
+}
+
+.btn-resign:hover:not(:disabled) {
+  background: #c82333 !important;
 }
 
 .sidebar {

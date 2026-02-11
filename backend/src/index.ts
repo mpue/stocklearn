@@ -61,6 +61,9 @@ app.post('/api/games/:id/move', async (req, res) => {
   try {
     const { id } = req.params;
     const { from, to, promotion } = req.body;
+    
+    // Skill Level aus Request holen, default 10
+    const skillLevel = req.body.skillLevel || 10;
 
     const game = await prisma.game.findUnique({
       where: { id },
@@ -115,7 +118,7 @@ app.post('/api/games/:id/move', async (req, res) => {
     let stockfishMove = null;
     if (status === 'active') {
       try {
-        const bestMove = await stockfishEngine.getBestMove(chess.fen(), 10);
+        const bestMove = await stockfishEngine.getBestMove(chess.fen(), skillLevel);
         
         // Stockfish-Zug ausführen
         const sfMoveResult = chess.move({
@@ -185,12 +188,166 @@ app.get('/api/games', async (req, res) => {
   try {
     const games = await prisma.game.findMany({
       orderBy: { createdAt: 'desc' },
-      take: 20
+      take: 20,
+      include: {
+        moves: true
+      }
     });
     res.json(games);
   } catch (error) {
     console.error('Error fetching games:', error);
     res.status(500).json({ error: 'Failed to fetch games' });
+  }
+});
+
+// Spiel analysieren
+app.post('/api/games/:id/analyze', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const game = await prisma.game.findUnique({
+      where: { id },
+      include: {
+        moves: {
+          orderBy: { moveNumber: 'asc' }
+        }
+      }
+    });
+
+    if (!game) {
+      return res.status(404).json({ error: 'Game not found' });
+    }
+
+    const chess = new Chess();
+    const analysis: any[] = [];
+    
+    // Startposition analysieren
+    const startEval = await stockfishEngine.evaluatePosition(chess.fen(), 15);
+    
+    for (const move of game.moves) {
+      // Position vor dem Zug
+      const positionBefore = chess.fen();
+      const turn = chess.turn();
+      
+      // Zug ausführen
+      chess.move({
+        from: move.from,
+        to: move.to,
+        promotion: move.san.includes('=') ? 'q' : undefined
+      });
+      
+      // Position nach dem Zug evaluieren
+      const positionAfter = chess.fen();
+      const evaluation = await stockfishEngine.evaluatePosition(positionAfter, 15);
+      
+      // Beste Alternative finden
+      const alternativeEval = await stockfishEngine.evaluatePosition(positionBefore, 15);
+      
+      // Fehlerklassifizierung
+      let classification = 'good';
+      let evalDiff = 0;
+      
+      if (game.moves.length > 1) {
+        const prevMove = analysis[analysis.length - 1];
+        if (prevMove) {
+          evalDiff = turn === 'w' 
+            ? (evaluation.evaluation - prevMove.evaluation)
+            : (prevMove.evaluation - evaluation.evaluation);
+          
+          if (evalDiff < -3) classification = 'blunder';
+          else if (evalDiff < -1.5) classification = 'mistake';
+          else if (evalDiff < -0.5) classification = 'inaccuracy';
+          else if (evalDiff > 0.5) classification = 'brilliant';
+        }
+      }
+      
+      analysis.push({
+        moveNumber: move.moveNumber,
+        move: move.san,
+        from: move.from,
+        to: move.to,
+        isPlayerMove: move.isPlayerMove,
+        evaluation: evaluation.evaluation,
+        mate: evaluation.mate,
+        bestMove: alternativeEval.bestMove,
+        bestMoveEval: alternativeEval.evaluation,
+        classification,
+        evalDiff,
+        fen: positionAfter
+      });
+    }
+
+    res.json({
+      gameId: id,
+      analysis,
+      summary: {
+        totalMoves: game.moves.length,
+        blunders: analysis.filter(a => a.classification === 'blunder').length,
+        mistakes: analysis.filter(a => a.classification === 'mistake').length,
+        inaccuracies: analysis.filter(a => a.classification === 'inaccuracy').length,
+        brilliancies: analysis.filter(a => a.classification === 'brilliant').length,
+      }
+    });
+  } catch (error) {
+    console.error('Error analyzing game:', error);
+    res.status(500).json({ error: 'Failed to analyze game' });
+  }
+});
+
+// Spiel aufgeben (resign)
+app.post('/api/games/:id/resign', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const game = await prisma.game.findUnique({
+      where: { id }
+    });
+    
+    if (!game) {
+      return res.status(404).json({ error: 'Game not found' });
+    }
+    
+    const updatedGame = await prisma.game.update({
+      where: { id },
+      data: {
+        status: 'resigned'
+      }
+    });
+    
+    res.json(updatedGame);
+  } catch (error) {
+    console.error('Error resigning game:', error);
+    res.status(500).json({ error: 'Failed to resign game' });
+  }
+});
+
+// Spiel löschen
+app.delete('/api/games/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const game = await prisma.game.findUnique({
+      where: { id }
+    });
+    
+    if (!game) {
+      return res.status(404).json({ error: 'Game not found' });
+    }
+    
+    // Zuerst alle Moves löschen
+    await prisma.move.deleteMany({
+      where: { gameId: id }
+    });
+    
+    // Dann das Spiel löschen
+    await prisma.game.delete({
+      where: { id }
+    });
+    
+    res.json({ message: 'Game deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting game:', error);
+    res.status(500).json({ error: 'Failed to delete game' });
   }
 });
 

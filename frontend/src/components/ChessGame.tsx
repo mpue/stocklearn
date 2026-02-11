@@ -1,19 +1,58 @@
 import { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Chess } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import { api, Game } from '../api/client';
 import './ChessGame.css';
 
 export function ChessGame() {
+  const { gameId: urlGameId } = useParams<{ gameId: string }>();
+  const navigate = useNavigate();
   const [game, setGame] = useState<Chess>(new Chess());
-  const [gameId, setGameId] = useState<string | null>(null);
-  const [status, setStatus] = useState<string>('Bereit für ein neues Spiel');
+  const [gameId, setGameId] = useState<string | null>(urlGameId || null);
+  const [status, setStatus] = useState<string>('Lade Spiel...');
+  const [gameStatus, setGameStatus] = useState<string>('active');
   const [isThinking, setIsThinking] = useState(false);
   const [moveHistory, setMoveHistory] = useState<string[]>([]);
+  const [skillLevel] = useState(() => {
+    return parseInt(localStorage.getItem('stockfishSkillLevel') || '10');
+  });
 
   useEffect(() => {
-    startNewGame();
-  }, []);
+    if (urlGameId) {
+      loadGame(urlGameId);
+    }
+  }, [urlGameId]);
+
+  const loadGame = async (id: string) => {
+    try {
+      setStatus('Lade Spiel...');
+      const loadedGame = await api.getGame(id);
+      setGameId(id);
+      const chess = new Chess(loadedGame.fen);
+      setGame(chess);
+      
+      if (loadedGame.moves && loadedGame.moves.length > 0) {
+        const history = loadedGame.moves
+          .sort((a, b) => a.moveNumber - b.moveNumber)
+          .map(m => m.san);
+        setMoveHistory(history);
+      }
+      
+      setGameStatus(loadedGame.status);
+      
+      if (loadedGame.status === 'active') {
+        setStatus(chess.turn() === 'w' ? 'Dein Zug!' : 'Stockfish ist am Zug...');
+      } else if (loadedGame.status === 'checkmate') {
+        setStatus(chess.turn() === 'w' ? 'Schachmatt! Stockfish gewinnt!' : 'Schachmatt! Du gewinnst!');
+      } else {
+        setStatus('Spiel beendet: ' + loadedGame.status);
+      }
+    } catch (error) {
+      console.error('Error loading game:', error);
+      setStatus('Fehler beim Laden des Spiels');
+    }
+  };
 
   const startNewGame = async () => {
     try {
@@ -24,9 +63,33 @@ export function ChessGame() {
       setGame(chess);
       setMoveHistory([]);
       setStatus('Dein Zug! Spiele mit Weiß gegen Stockfish.');
+      // Update URL
+      navigate(`/game/${newGame.id}`, { replace: true });
     } catch (error) {
       console.error('Error starting new game:', error);
       setStatus('Fehler beim Erstellen des Spiels');
+    }
+  };
+
+  const backToDashboard = () => {
+    navigate('/');
+  };
+
+  const resignGame = async () => {
+    if (!gameId) return;
+    
+    if (!confirm('Spiel wirklich aufgeben?')) {
+      return;
+    }
+    
+    try {
+      await api.resignGame(gameId);
+      setStatus('Du hast aufgegeben. Stockfish gewinnt!');
+      // Spiel neu laden um den aktualisierten Status zu zeigen
+      await loadGame(gameId);
+    } catch (error) {
+      console.error('Error resigning game:', error);
+      setStatus('Fehler beim Aufgeben');
     }
   };
 
@@ -108,7 +171,12 @@ export function ChessGame() {
     <div className="chess-game">
       <div className="game-container">
         <div className="board-container">
-          <h1>StockLearn</h1>
+          <div className="game-header-bar">
+            <button className="btn-back" onClick={backToDashboard}>
+              ← Zurück zum Dashboard
+            </button>
+            <h1>StockLearn</h1>
+          </div>
           <div className="status-bar">
             <span className="status">{status}</span>
             {isThinking && <span className="thinking">⏳</span>}
@@ -129,6 +197,14 @@ export function ChessGame() {
           <div className="controls">
             <button onClick={startNewGame} disabled={isThinking}>
               Neues Spiel
+            </button>
+            {gameStatus === 'active' && gameId && (
+              <button onClick={resignGame} disabled={isThinking} className="btn-resign">
+                Aufgeben
+              </button>
+            )}
+            <button onClick={backToDashboard}>
+              Dashboard
             </button>
           </div>
         </div>
