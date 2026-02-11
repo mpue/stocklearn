@@ -46,6 +46,7 @@ services:
     container_name: stocklearn-frontend
     environment:
       VITE_API_URL: http://localhost:3004
+      VITE_ALLOWED_HOSTS: chess.cflux.org
     ports:
       - "3005:5173"
     volumes:
