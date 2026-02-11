@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Chess } from 'chess.js';
+import { Chess, Square } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
@@ -20,6 +20,8 @@ export function ChessGame() {
   const [gameStatus, setGameStatus] = useState<string>('active');
   const [isThinking, setIsThinking] = useState(false);
   const [moveHistory, setMoveHistory] = useState<string[]>([]);
+  const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
+  const [lastMove, setLastMove] = useState<{ from: Square; to: Square } | null>(null);
   const [skillLevel] = useState(() => {
     return parseInt(localStorage.getItem('stockfishSkillLevel') || '10');
   });
@@ -59,6 +61,16 @@ export function ChessGame() {
           .sort((a, b) => a.moveNumber - b.moveNumber)
           .map(m => m.san);
         setMoveHistory(history);
+        
+        // Letzten Zug setzen
+        const sortedMoves = updatedGame.moves.sort((a, b) => a.moveNumber - b.moveNumber);
+        if (sortedMoves.length > 0) {
+          const lastMoveData = sortedMoves[sortedMoves.length - 1];
+          setLastMove({ 
+            from: lastMoveData.from as Square, 
+            to: lastMoveData.to as Square 
+          });
+        }
       }
       
       setGameStatus(updatedGame.status);
@@ -118,6 +130,14 @@ export function ChessGame() {
           .sort((a, b) => a.moveNumber - b.moveNumber)
           .map(m => m.san);
         setMoveHistory(history);
+        
+        // Letzten Zug setzen
+        const sortedMoves = loadedGame.moves.sort((a, b) => a.moveNumber - b.moveNumber);
+        const lastMoveData = sortedMoves[sortedMoves.length - 1];
+        setLastMove({ 
+          from: lastMoveData.from as Square, 
+          to: lastMoveData.to as Square 
+        });
       }
       
       setGameStatus(loadedGame.status);
@@ -168,6 +188,8 @@ export function ChessGame() {
       const chess = new Chess();
       setGame(chess);
       setMoveHistory([]);
+      setSelectedSquare(null);
+      setLastMove(null);
       setStatus('Dein Zug! Spiele mit Weiß gegen Stockfish.');
       // Update URL
       navigate(`/game/${newGame.id}`, { replace: true });
@@ -197,6 +219,116 @@ export function ChessGame() {
       console.error('Error resigning game:', error);
       setStatus('Fehler beim Aufgeben');
     }
+  };
+
+  // Funktion um mögliche Züge zu berechnen
+  const getPossibleMoves = (square: Square): Square[] => {
+    const moves = game.moves({ square, verbose: true });
+    return moves.map((move: any) => move.to as Square);
+  };
+
+  // Funktion um den König im Schach zu finden
+  const getKingInCheckSquare = (): Square | null => {
+    if (!game.isCheck()) return null;
+    
+    const turn = game.turn();
+    const board = game.board();
+    
+    for (let row = 0; row < 8; row++) {
+      for (let col = 0; col < 8; col++) {
+        const piece = board[row][col];
+        if (piece && piece.type === 'k' && piece.color === turn) {
+          const file = String.fromCharCode(97 + col); // 'a' bis 'h'
+          const rank = String(8 - row); // '8' bis '1'
+          return (file + rank) as Square;
+        }
+      }
+    }
+    
+    return null;
+  };
+
+  // Funktion um custom styles für Felder zu generieren
+  const getSquareStyles = () => {
+    const styles: Record<string, React.CSSProperties> = {};
+    
+    // Letzter Zug hervorheben
+    if (lastMove) {
+      styles[lastMove.from] = { backgroundColor: 'rgba(255, 255, 0, 0.4)' };
+      styles[lastMove.to] = { backgroundColor: 'rgba(255, 255, 0, 0.4)' };
+    }
+    
+    // Mögliche Züge hervorheben wenn eine Figur ausgewählt ist
+    if (selectedSquare) {
+      styles[selectedSquare] = { backgroundColor: 'rgba(255, 255, 0, 0.6)' };
+      
+      const possibleMoves = getPossibleMoves(selectedSquare);
+      possibleMoves.forEach(square => {
+        styles[square] = { 
+          background: 'radial-gradient(circle, rgba(0, 0, 0, 0.1) 25%, transparent 25%)',
+          borderRadius: '50%'
+        };
+      });
+    }
+    
+    // König im Schach rot umranden
+    const kingSquare = getKingInCheckSquare();
+    if (kingSquare) {
+      styles[kingSquare] = {
+        ...styles[kingSquare],
+        boxShadow: 'inset 0 0 0 4px rgba(255, 0, 0, 0.8)'
+      };
+    }
+    
+    return styles;
+  };
+
+  // Handler für Feldklick
+  const onSquareClick = (square: Square) => {
+    // Wenn Spiel nicht aktiv oder am Denken, nichts tun
+    if (gameStatus !== 'active' || isThinking) {
+      return;
+    }
+
+    // Wenn keine Figur ausgewählt, versuche eine zu wählen
+    if (!selectedSquare) {
+      const piece = game.get(square);
+      if (piece && piece.color === game.turn()) {
+        // Bei PvP: Prüfen ob der User die richtige Farbe hat
+        if (gameData?.gameType === 'vs_player') {
+          const isWhite = gameData.whitePlayer?.id === user?.id;
+          const isBlack = gameData.blackPlayer?.id === user?.id;
+          
+          if ((piece.color === 'w' && !isWhite) || (piece.color === 'b' && !isBlack)) {
+            return;
+          }
+        }
+        
+        setSelectedSquare(square);
+      }
+      return;
+    }
+
+    // Wenn gleiche Figur nochmal geklickt, Auswahl aufheben
+    if (selectedSquare === square) {
+      setSelectedSquare(null);
+      return;
+    }
+
+    // Wenn eine andere eigene Figur geklickt, diese auswählen
+    const piece = game.get(square);
+    if (piece && piece.color === game.turn()) {
+      setSelectedSquare(square);
+      return;
+    }
+
+    // Versuche den Zug zu machen
+    const possibleMoves = getPossibleMoves(selectedSquare);
+    if (possibleMoves.includes(square)) {
+      onDrop(selectedSquare, square);
+    }
+    
+    setSelectedSquare(null);
   };
 
   const onDrop = async (sourceSquare: string, targetSquare: string) => {
@@ -244,6 +376,8 @@ export function ChessGame() {
       // Sofort den Spielerzug anzeigen (optimistic update)
       setGame(gameCopy);
       setIsThinking(true);
+      setSelectedSquare(null);
+      setLastMove({ from: sourceSquare as Square, to: targetSquare as Square });
       
       if (gameData.gameType === 'vs_player') {
         setStatus('Warte auf Gegner...');
@@ -334,6 +468,13 @@ export function ChessGame() {
 
   return (
     <div className="chess-game">
+      <div className="game-header-bar">
+        <button className="btn-back" onClick={backToDashboard}>
+          ← Zurück zum Dashboard
+        </button>
+        <h1>StockLearn</h1>
+      </div>
+      
       <div className="game-container">
         {/* Chat Panel links - nur bei PvP Spielen */}
         {gameData?.gameType === 'vs_player' && gameId && user && (
@@ -348,12 +489,6 @@ export function ChessGame() {
         )}
 
         <div className="board-container">
-          <div className="game-header-bar">
-            <button className="btn-back" onClick={backToDashboard}>
-              ← Zurück zum Dashboard
-            </button>
-            <h1>StockLearn</h1>
-          </div>
           <div className="status-bar">
             <span className="status">{status}</span>
             {isThinking && <span className="thinking">⏳</span>}
@@ -362,6 +497,8 @@ export function ChessGame() {
             <Chessboard
               position={game.fen()}
               onPieceDrop={onDrop}
+              onSquareClick={onSquareClick}
+              customSquareStyles={getSquareStyles()}
               boardWidth={560}
               animationDuration={200}
               arePiecesDraggable={!isThinking && gameStatus === 'active'}
