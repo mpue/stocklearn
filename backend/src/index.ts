@@ -667,6 +667,22 @@ io.on('connection', (socket) => {
     console.log(`Socket ${socket.id} left game ${gameId}`);
   });
 
+  // Chat message handler
+  socket.on('chat-message', ({ gameId, message, username }: { gameId: string, message: string, username: string }) => {
+    if (!gameId || !message || !username) {
+      return;
+    }
+    
+    // Broadcast message to all clients in the game room
+    io.to(`game:${gameId}`).emit('chat-message', {
+      username,
+      message,
+      timestamp: new Date().toISOString()
+    });
+    
+    console.log(`Chat message in game ${gameId} from ${username}: ${message}`);
+  });
+
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
   });

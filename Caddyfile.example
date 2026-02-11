@@ -6,27 +6,12 @@ chess.cflux.org {
     
     # Backend API endpoints
     handle /api/* {
-        reverse_proxy localhost:3004 {
-            header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
-            header_up X-Forwarded-Proto {scheme}
-        }
+        reverse_proxy localhost:3004
     }
     
     # WebSocket endpoint for Socket.IO
     handle /socket.io/* {
-        reverse_proxy localhost:3004 {
-            # WebSocket support
-            header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
-            header_up X-Forwarded-Proto {scheme}
-            
-            # Enable WebSocket upgrades
-            header_up Connection {>Connection}
-            header_up Upgrade {>Upgrade}
-        }
+        reverse_proxy localhost:3004
     }
     
     # Health check endpoint
@@ -36,16 +21,7 @@ chess.cflux.org {
     
     # Frontend - everything else
     handle {
-        reverse_proxy localhost:3005 {
-            header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
-            header_up X-Forwarded-Proto {scheme}
-            
-            # WebSocket support for Vite HMR (Hot Module Replacement)
-            header_up Connection {>Connection}
-            header_up Upgrade {>Upgrade}
-        }
+        reverse_proxy localhost:3005
     }
     
     # Logging (optional)

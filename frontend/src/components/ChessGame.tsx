@@ -5,6 +5,7 @@ import { Chessboard } from 'react-chessboard';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { api, Game as ApiGame } from '../api/client';
+import { GameChat } from './GameChat';
 import './ChessGame.css';
 
 export function ChessGame() {
@@ -334,6 +335,18 @@ export function ChessGame() {
   return (
     <div className="chess-game">
       <div className="game-container">
+        {/* Chat Panel links - nur bei PvP Spielen */}
+        {gameData?.gameType === 'vs_player' && gameId && user && (
+          <div className="sidebar-left">
+            <div className="chat-panel">
+              <GameChat 
+                gameId={gameId} 
+                currentUsername={user.username}
+              />
+            </div>
+          </div>
+        )}
+
         <div className="board-container">
           <div className="game-header-bar">
             <button className="btn-back" onClick={backToDashboard}>

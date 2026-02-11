@@ -10,9 +10,17 @@
 .game-container {
   display: flex;
   gap: 30px;
-  max-width: 1200px;
+  max-width: 1400px;
   width: 100%;
   align-items: flex-start;
+  justify-content: center;
+}
+
+.sidebar-left {
+  flex: 0 0 350px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
 .board-container {
@@ -221,14 +229,30 @@
   color: #333;
 }
 
+/* Chat Panel */
+.sidebar-left .chat-panel {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  height: 600px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 @media (max-width: 1024px) {
   .game-container {
     flex-direction: column;
     align-items: center;
   }
 
+  .sidebar-left,
   .sidebar {
     width: 100%;
     max-width: 560px;
+  }
+  
+  .sidebar-left .chat-panel {
+    height: 400px;
   }
 }
