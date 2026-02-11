@@ -1,0 +1,65 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: stocklearn-db
+    environment:
+      POSTGRES_USER: stocklearn
+      POSTGRES_PASSWORD: stocklearn123
+      POSTGRES_DB: stocklearn
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - stocklearn-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stocklearn"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: stocklearn-backend
+    environment:
+      DATABASE_URL: postgresql://stocklearn:stocklearn123@postgres:5432/stocklearn
+      PORT: 3001
+      NODE_ENV: development
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - stocklearn-network
+    command: sh -c "sleep 5 && pnpm prisma migrate deploy && pnpm dev"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: stocklearn-frontend
+    environment:
+      VITE_API_URL: http://localhost:3001
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - stocklearn-network
+    command: pnpm dev
+
+volumes:
+  postgres-data:
+
+networks:
+  stocklearn-network:
+    driver: bridge
