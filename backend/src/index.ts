@@ -12,17 +12,28 @@ import { authenticateToken, generateToken, AuthRequest } from './middleware/auth
 dotenv.config();
 
 const app = express();
+
+// Trust proxy for SSL/WSS support behind reverse proxy
+app.set('trust proxy', 1);
+
 const httpServer = createServer(app);
 const io = new SocketIOServer(httpServer, {
   cors: {
     origin: process.env.FRONTEND_URL || 'http://localhost:3005',
-    methods: ['GET', 'POST']
-  }
+    methods: ['GET', 'POST'],
+    credentials: true
+  },
+  // Allow both ws and wss connections
+  transports: ['websocket', 'polling'],
+  allowEIO3: true
 });
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3004;
 
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:3005',
+  credentials: true
+}));
 app.use(express.json());
 
 // Health Check

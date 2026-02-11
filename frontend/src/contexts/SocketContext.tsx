@@ -10,7 +10,16 @@ const SocketContext = createContext<SocketContextType>({ socket: null, isConnect
 
 export const useSocket = () => useContext(SocketContext);
 
-const SOCKET_URL = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3004';
+// Determine socket URL with correct protocol (ws or wss)
+const getSocketUrl = () => {
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3004';
+  // Remove /api suffix if present
+  const baseUrl = apiUrl.replace('/api', '');
+  // Socket.IO automatically handles ws:// vs wss:// based on http:// vs https://
+  return baseUrl;
+};
+
+const SOCKET_URL = getSocketUrl();
 
 export function SocketProvider({ children }: { children: React.ReactNode }) {
   const [socket, setSocket] = useState<Socket | null>(null);
