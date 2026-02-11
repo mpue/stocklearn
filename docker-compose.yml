@@ -27,6 +27,7 @@ services:
       DATABASE_URL: postgresql://stocklearn:stocklearn123@postgres:5432/stocklearn
       PORT: 3004
       NODE_ENV: development
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3005}
     ports:
       - "3004:3004"
     volumes:
@@ -45,8 +46,8 @@ services:
       dockerfile: Dockerfile
     container_name: stocklearn-frontend
     environment:
-      VITE_API_URL: http://localhost:3004
-      VITE_ALLOWED_HOSTS: chess.cflux.org
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:3004}
+      VITE_ALLOWED_HOSTS: ${VITE_ALLOWED_HOSTS:-chess.cflux.org}
     ports:
       - "3005:5173"
     volumes:
