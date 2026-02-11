@@ -3,7 +3,9 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
 import { Chess } from 'chess.js';
+import bcrypt from 'bcryptjs';
 import { stockfishEngine } from './services/stockfish.service.js';
+import { authenticateToken, generateToken, AuthRequest } from './middleware/auth.middleware.js';
 
 dotenv.config();
 
@@ -19,11 +21,129 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Auth - Register
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { email, username, password } = req.body;
+
+    if (!email || !username || !password) {
+      return res.status(400).json({ error: 'Email, username and password are required' });
+    }
+
+    // Check if user already exists
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { email },
+          { username }
+        ]
+      }
+    });
+
+    if (existingUser) {
+      return res.status(400).json({ error: 'User with this email or username already exists' });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create user
+    const user = await prisma.user.create({
+      data: {
+        email,
+        username,
+        password: hashedPassword
+      }
+    });
+
+    // Generate token
+    const token = generateToken(user.id);
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username
+      }
+    });
+  } catch (error) {
+    console.error('Error registering user:', error);
+    res.status(500).json({ error: 'Failed to register user' });
+  }
+});
+
+// Auth - Login
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    // Find user
+    const user = await prisma.user.findUnique({
+      where: { email }
+    });
+
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Verify password
+    const validPassword = await bcrypt.compare(password, user.password);
+
+    if (!validPassword) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Generate token
+    const token = generateToken(user.id);
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username
+      }
+    });
+  } catch (error) {
+    console.error('Error logging in:', error);
+    res.status(500).json({ error: 'Failed to login' });
+  }
+});
+
+// Auth - Get current user
+app.get('/api/auth/me', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({
+      id: user.id,
+      email: user.email,
+      username: user.username
+    });
+  } catch (error) {
+    console.error('Error fetching user:', error);
+    res.status(500).json({ error: 'Failed to fetch user' });
+  }
+});
+
 // Neues Spiel erstellen
-app.post('/api/games', async (req, res) => {
+app.post('/api/games', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const game = await prisma.game.create({
-      data: {},
+      data: {
+        userId: req.userId!
+      },
     });
     res.json(game);
   } catch (error) {
@@ -33,7 +153,7 @@ app.post('/api/games', async (req, res) => {
 });
 
 // Spiel laden
-app.get('/api/games/:id', async (req, res) => {
+app.get('/api/games/:id', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     const game = await prisma.game.findUnique({
@@ -48,6 +168,11 @@ app.get('/api/games/:id', async (req, res) => {
     if (!game) {
       return res.status(404).json({ error: 'Game not found' });
     }
+
+    // Prüfen ob Spiel dem User gehört
+    if (game.userId !== req.userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
     
     res.json(game);
   } catch (error) {
@@ -57,7 +182,7 @@ app.get('/api/games/:id', async (req, res) => {
 });
 
 // Zug ausführen
-app.post('/api/games/:id/move', async (req, res) => {
+app.post('/api/games/:id/move', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     const { from, to, promotion } = req.body;
@@ -72,6 +197,11 @@ app.post('/api/games/:id/move', async (req, res) => {
 
     if (!game) {
       return res.status(404).json({ error: 'Game not found' });
+    }
+
+    // Prüfen ob Spiel dem User gehört
+    if (game.userId !== req.userId) {
+      return res.status(403).json({ error: 'Access denied' });
     }
 
     if (game.status !== 'active') {
@@ -184,9 +314,10 @@ app.post('/api/games/:id/move', async (req, res) => {
 });
 
 // Alle Spiele abrufen
-app.get('/api/games', async (req, res) => {
+app.get('/api/games', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const games = await prisma.game.findMany({
+      where: { userId: req.userId },
       orderBy: { createdAt: 'desc' },
       take: 20,
       include: {
@@ -201,7 +332,7 @@ app.get('/api/games', async (req, res) => {
 });
 
 // Spiel analysieren
-app.post('/api/games/:id/analyze', async (req, res) => {
+app.post('/api/games/:id/analyze', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     
@@ -216,6 +347,11 @@ app.post('/api/games/:id/analyze', async (req, res) => {
 
     if (!game) {
       return res.status(404).json({ error: 'Game not found' });
+    }
+
+    // Prüfen ob Spiel dem User gehört
+    if (game.userId !== req.userId) {
+      return res.status(403).json({ error: 'Access denied' });
     }
 
     const chess = new Chess();
@@ -295,7 +431,7 @@ app.post('/api/games/:id/analyze', async (req, res) => {
 });
 
 // Spiel aufgeben (resign)
-app.post('/api/games/:id/resign', async (req, res) => {
+app.post('/api/games/:id/resign', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     
@@ -305,6 +441,11 @@ app.post('/api/games/:id/resign', async (req, res) => {
     
     if (!game) {
       return res.status(404).json({ error: 'Game not found' });
+    }
+
+    // Prüfen ob Spiel dem User gehört
+    if (game.userId !== req.userId) {
+      return res.status(403).json({ error: 'Access denied' });
     }
     
     const updatedGame = await prisma.game.update({
@@ -322,7 +463,7 @@ app.post('/api/games/:id/resign', async (req, res) => {
 });
 
 // Spiel löschen
-app.delete('/api/games/:id', async (req, res) => {
+app.delete('/api/games/:id', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     
@@ -332,6 +473,11 @@ app.delete('/api/games/:id', async (req, res) => {
     
     if (!game) {
       return res.status(404).json({ error: 'Game not found' });
+    }
+
+    // Prüfen ob Spiel dem User gehört
+    if (game.userId !== req.userId) {
+      return res.status(403).json({ error: 'Access denied' });
     }
     
     // Zuerst alle Moves löschen

@@ -1,9 +1,14 @@
 FROM node:20-slim
 
-# Stockfish und Dependencies installieren
+# Stockfish, build tools und Dependencies installieren
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends stockfish curl && \
-    apt-get clean && \
+    apt-get install -y --no-install-recommends \
+    stockfish \
+    curl \
+    python3 \
+    make \
+    g++ \
+    && apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 # pnpm installieren

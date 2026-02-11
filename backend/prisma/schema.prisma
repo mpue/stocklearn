@@ -7,11 +7,23 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  username  String   @unique
+  password  String
+  games     Game[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Game {
   id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   pgn       String   @default("")
   fen       String   @default("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
-  status    String   @default("active") // active, checkmate, stalemate, draw
+  status    String   @default("active") // active, checkmate, stalemate, draw, resigned
   moves     Move[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

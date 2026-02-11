@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import { api, Game } from '../api/client';
 import './Dashboard.css';
 
 export function Dashboard() {
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const [games, setGames] = useState<Game[]>([]);
   const [loading, setLoading] = useState(true);
   const [skillLevel, setSkillLevel] = useState(() => {
@@ -94,8 +96,16 @@ export function Dashboard() {
   return (
     <div className="dashboard">
       <div className="dashboard-header">
-        <h1>♟️ StockLearn</h1>
-        <p className="subtitle">Lerne Schach mit der Stockfish Engine</p>
+        <div>
+          <h1>♟️ StockLearn</h1>
+          <p className="subtitle">Lerne Schach mit der Stockfish Engine</p>
+        </div>
+        <div className="user-section">
+          <span className="username">👤 {user?.username}</span>
+          <button onClick={logout} className="btn btn-logout">
+            Abmelden
+          </button>
+        </div>
       </div>
 
       <div className="dashboard-container">

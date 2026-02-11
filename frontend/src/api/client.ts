@@ -1,5 +1,24 @@
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('authToken');
+  return {
+    'Content-Type': 'application/json',
+    ...(token && { 'Authorization': `Bearer ${token}` })
+  };
+};
+
+export interface User {
+  id: string;
+  email: string;
+  username: string;
+}
+
+export interface AuthResponse {
+  token: string;
+  user: User;
+}
+
 export interface Game {
   id: string;
   pgn: string;
@@ -29,10 +48,60 @@ export interface MoveResponse {
 }
 
 export const api = {
+  async register(email: string, username: string, password: string): Promise<AuthResponse> {
+    const response = await fetch(`${API_URL}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, username, password }),
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to register');
+    }
+    
+    const data = await response.json();
+    localStorage.setItem('authToken', data.token);
+    return data;
+  },
+
+  async login(email: string, password: string): Promise<AuthResponse> {
+    const response = await fetch(`${API_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to login');
+    }
+    
+    const data = await response.json();
+    localStorage.setItem('authToken', data.token);
+    return data;
+  },
+
+  async getCurrentUser(): Promise<User> {
+    const response = await fetch(`${API_URL}/api/auth/me`, {
+      headers: getAuthHeaders(),
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch current user');
+    }
+    
+    return response.json();
+  },
+
+  logout() {
+    localStorage.removeItem('authToken');
+  },
+
   async createGame(): Promise<Game> {
     const response = await fetch(`${API_URL}/api/games`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
     });
     
     if (!response.ok) {
@@ -43,7 +112,9 @@ export const api = {
   },
 
   async getGame(gameId: string): Promise<Game> {
-    const response = await fetch(`${API_URL}/api/games/${gameId}`);
+    const response = await fetch(`${API_URL}/api/games/${gameId}`, {
+      headers: getAuthHeaders(),
+    });
     
     if (!response.ok) {
       throw new Error('Failed to fetch game');
@@ -57,7 +128,7 @@ export const api = {
     
     const response = await fetch(`${API_URL}/api/games/${gameId}/move`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ from, to, promotion, skillLevel }),
     });
     
@@ -70,7 +141,9 @@ export const api = {
   },
 
   async getGames(): Promise<Game[]> {
-    const response = await fetch(`${API_URL}/api/games`);
+    const response = await fetch(`${API_URL}/api/games`, {
+      headers: getAuthHeaders(),
+    });
     
     if (!response.ok) {
       throw new Error('Failed to fetch games');
@@ -82,7 +155,7 @@ export const api = {
   async analyzeGame(gameId: string): Promise<any> {
     const response = await fetch(`${API_URL}/api/games/${gameId}/analyze`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
     });
     
     if (!response.ok) {
@@ -95,7 +168,7 @@ export const api = {
   async resignGame(gameId: string): Promise<Game> {
     const response = await fetch(`${API_URL}/api/games/${gameId}/resign`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
     });
     
     if (!response.ok) {
@@ -108,7 +181,7 @@ export const api = {
   async deleteGame(gameId: string): Promise<void> {
     const response = await fetch(`${API_URL}/api/games/${gameId}`, {
       method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
     });
     
     if (!response.ok) {
