@@ -1,6 +1,6 @@
 .game-analysis {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--color-background, linear-gradient(135deg, #667eea 0%, #764ba2 100%));
   padding: 20px;
 }
 
@@ -9,6 +9,7 @@
   margin: 0 auto 30px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 20px;
 }
 
@@ -48,8 +49,8 @@
 
 .move-controls button {
   background: white;
-  border: 2px solid #667eea;
-  color: #667eea;
+  border: 2px solid var(--color-accent, #667eea);
+  color: var(--color-accent, #667eea);
   padding: 12px;
   border-radius: 8px;
   font-weight: 600;
@@ -58,7 +59,7 @@
 }
 
 .move-controls button:hover:not(:disabled) {
-  background: #667eea;
+  background: var(--color-accent, #667eea);
   color: white;
   transform: translateY(-2px);
 }
@@ -260,7 +261,7 @@
 }
 
 .move-analysis-item.active {
-  background: #667eea;
+  background: var(--color-accent, #667eea);
   color: white;
   font-weight: 600;
 }
@@ -322,7 +323,7 @@
   margin-top: 20px;
   padding: 12px 30px;
   background: white;
-  color: #667eea;
+  color: var(--color-accent, #667eea);
   border: none;
   border-radius: 8px;
   font-size: 1rem;

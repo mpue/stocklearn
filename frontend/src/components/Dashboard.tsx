@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api, Game } from '../api/client';
+import { Lobby } from './Lobby';
+import { ThemeSwitcher } from './ThemeSwitcher';
 import './Dashboard.css';
 
 export function Dashboard() {
@@ -12,6 +14,7 @@ export function Dashboard() {
   const [availableGames, setAvailableGames] = useState<Game[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingAvailable, setLoadingAvailable] = useState(false);
+  const [activeTab, setActiveTab] = useState<'new-game' | 'lobby' | 'my-games'>('lobby');
   const [gameType, setGameType] = useState<'vs_stockfish' | 'vs_player'>('vs_stockfish');
   const [skillLevel, setSkillLevel] = useState(() => {
     return parseInt(localStorage.getItem('stockfishSkillLevel') || '10');
@@ -104,6 +107,11 @@ export function Dashboard() {
     }
   };
 
+  const handleLobbyJoin = async (gameId: string) => {
+    await loadGames();
+    navigate(`/game/${gameId}`);
+  };
+
   const viewGame = (gameId: string) => {
     navigate(`/game/${gameId}`);
   };
@@ -168,6 +176,7 @@ export function Dashboard() {
           <p className="subtitle">Lerne Schach mit der Stockfish Engine</p>
         </div>
         <div className="user-section">
+          <ThemeSwitcher />
           <span className="username">👤 {user?.username}</span>
           <button onClick={logout} className="btn btn-logout">
             Abmelden
@@ -175,7 +184,35 @@ export function Dashboard() {
         </div>
       </div>
 
+      <div className="dashboard-tabs">
+        <button
+          className={`tab-btn ${activeTab === 'lobby' ? 'active' : ''}`}
+          onClick={() => setActiveTab('lobby')}
+        >
+          🎮 Lobby
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'new-game' ? 'active' : ''}`}
+          onClick={() => setActiveTab('new-game')}
+        >
+          ➕ Neues Spiel
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'my-games' ? 'active' : ''}`}
+          onClick={() => setActiveTab('my-games')}
+        >
+          📋 Meine Spiele
+        </button>
+      </div>
+
       <div className="dashboard-container">
+        {activeTab === 'lobby' && (
+          <div className="main-section full-width">
+            <Lobby onJoinGame={handleLobbyJoin} />
+          </div>
+        )}
+
+        {activeTab === 'new-game' && (
         <div className="main-section">
           <div className="card new-game-card">
             <h2>Neues Spiel starten</h2>
@@ -249,7 +286,11 @@ export function Dashboard() {
               )}
             </div>
           )}
+        </div>
+        )}
 
+        {activeTab === 'my-games' && (
+          <div className="main-section">
           <div className="card games-list-card">
             <h2>Deine Spiele</h2>
             {loading ? (
@@ -305,8 +346,10 @@ export function Dashboard() {
               </div>
             )}
           </div>
-        </div>
+          </div>
+        )}
 
+        {activeTab !== 'lobby' && (
         <div className="sidebar-section">
           <div className="card info-card">
             <h3>ℹ️ Info</h3>
@@ -339,6 +382,7 @@ export function Dashboard() {
             </div>
           </div>
         </div>
+        )}
       </div>
     </div>
   );

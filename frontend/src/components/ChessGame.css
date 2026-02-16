@@ -1,6 +1,6 @@
 .chess-game {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--color-background, linear-gradient(135deg, #667eea 0%, #764ba2 100%));
   padding: 20px;
   display: flex;
   flex-direction: column;
@@ -55,7 +55,7 @@
 
 .btn-back:hover {
   background: white;
-  color: #667eea;
+  color: var(--color-accent, #667eea);
   transform: translateX(-5px);
 }
 
@@ -110,7 +110,7 @@
 
 .controls button {
   background: white;
-  color: #667eea;
+  color: var(--color-accent, #667eea);
   border: none;
   padding: 12px 30px;
   border-radius: 8px;
@@ -122,7 +122,7 @@
 }
 
 .controls button:hover:not(:disabled) {
-  background: #667eea;
+  background: var(--color-accent, #667eea);
   color: white;
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
@@ -134,7 +134,7 @@
 }
 
 .btn-resign {
-  background: #dc3545 !important;
+  background: var(--color-danger, #dc3545) !important;
   color: white !important;
 }
 
@@ -164,7 +164,7 @@
   margin-bottom: 15px;
   color: #333;
   font-size: 1.3rem;
-  border-bottom: 2px solid #667eea;
+  border-bottom: 2px solid var(--color-accent, #667eea);
   padding-bottom: 10px;
 }
 

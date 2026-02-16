@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Chess } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import { api } from '../api/client';
+import { ThemeSwitcher } from './ThemeSwitcher';
 import './GameAnalysis.css';
 
 interface MoveAnalysis {
@@ -146,6 +147,7 @@ export function GameAnalysis() {
           ← Zurück zum Dashboard
         </button>
         <h1>📊 Spielanalyse</h1>
+        <ThemeSwitcher />
       </div>
 
       <div className="analysis-container">

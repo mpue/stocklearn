@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { api, Game as ApiGame } from '../api/client';
 import { GameChat } from './GameChat';
+import { ThemeSwitcher } from './ThemeSwitcher';
 import './ChessGame.css';
 
 export function ChessGame() {
@@ -473,6 +474,7 @@ export function ChessGame() {
           ← Zurück zum Dashboard
         </button>
         <h1>StockLearn</h1>
+        <ThemeSwitcher />
       </div>
       
       <div className="game-container">

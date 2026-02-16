@@ -3,7 +3,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--color-background, linear-gradient(135deg, #667eea 0%, #764ba2 100%));
   padding: 20px;
 }
 
@@ -61,7 +61,7 @@
 
 .form-group input:focus {
   outline: none;
-  border-color: #667eea;
+  border-color: var(--color-accent, #667eea);
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
@@ -85,7 +85,7 @@
 }
 
 .btn-primary {
-  background: #667eea;
+  background: var(--color-accent, #667eea);
   color: white;
 }
 
@@ -120,7 +120,7 @@
 }
 
 .auth-footer a {
-  color: #667eea;
+  color: var(--color-accent, #667eea);
   text-decoration: none;
   font-weight: 600;
 }
