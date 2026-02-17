@@ -10,6 +10,8 @@ import { GameChat } from './GameChat';
 import { ThemeSwitcher } from './ThemeSwitcher';
 import './ChessGame.css';
 
+const moveSound = new Audio('/audio/pock.mp3');
+
 export function ChessGame() {
   const { gameId: urlGameId } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
@@ -116,6 +118,10 @@ export function ChessGame() {
     const handleGameUpdated = (data: { game: ApiGame; stockfishMove: any }) => {
       console.log('Game updated via WebSocket');
       const updatedGame = data.game;
+
+      // Sound abspielen wenn Gegner zieht
+      moveSound.currentTime = 0;
+      moveSound.play().catch(() => {});
       
       setGameData(updatedGame);
       const chess = new Chess(updatedGame.fen);
@@ -438,6 +444,10 @@ export function ChessGame() {
         return false;
       }
 
+      // Sound abspielen bei gültigem Zug
+      moveSound.currentTime = 0;
+      moveSound.play().catch(() => {});
+
       // Sofort den Spielerzug anzeigen (optimistic update)
       setGame(gameCopy);
       setIsThinking(true);
@@ -453,6 +463,10 @@ export function ChessGame() {
       // Zug an Backend senden
       const response = await api.makeMove(gameId, sourceSquare, targetSquare, promotion);
       
+      // Sound abspielen wenn Gegner (Stockfish/Spieler) geantwortet hat
+      moveSound.currentTime = 0;
+      moveSound.play().catch(() => {});
+
       // Spiel mit Antwort aktualisieren
       const updatedGame = new Chess(response.game.fen);
       setGame(updatedGame);
