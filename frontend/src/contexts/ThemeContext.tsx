@@ -18,6 +18,11 @@ export interface Theme {
     danger: string;
     warning: string;
   };
+  board: {
+    lightSquare: string;
+    darkSquare: string;
+    pieceStyle: string; // URL pattern or style identifier
+  };
 }
 
 export const themes: Record<ThemeName, Theme> = {
@@ -36,6 +41,11 @@ export const themes: Record<ThemeName, Theme> = {
       danger: '#dc3545',
       warning: '#ffc107',
     },
+    board: {
+      lightSquare: '#e8e0f5',
+      darkSquare: '#8b7ab8',
+      pieceStyle: '/pieces/cburnett',
+    },
   },
   dark: {
     name: 'dark',
@@ -51,6 +61,11 @@ export const themes: Record<ThemeName, Theme> = {
       success: '#10b981',
       danger: '#ef4444',
       warning: '#f59e0b',
+    },
+    board: {
+      lightSquare: '#2d3748',
+      darkSquare: '#1a202c',
+      pieceStyle: '/pieces/cardinal',
     },
   },
   blue: {
@@ -68,6 +83,11 @@ export const themes: Record<ThemeName, Theme> = {
       danger: '#dc3545',
       warning: '#ffc107',
     },
+    board: {
+      lightSquare: '#d4e6f1',
+      darkSquare: '#2874a6',
+      pieceStyle: '/pieces/merida',
+    },
   },
   green: {
     name: 'green',
@@ -84,6 +104,11 @@ export const themes: Record<ThemeName, Theme> = {
       danger: '#dc3545',
       warning: '#ffc107',
     },
+    board: {
+      lightSquare: '#d5f4e6',
+      darkSquare: '#27ae60',
+      pieceStyle: '/pieces/alpha',
+    },
   },
   sunset: {
     name: 'sunset',
@@ -99,6 +124,11 @@ export const themes: Record<ThemeName, Theme> = {
       success: '#28a745',
       danger: '#dc3545',
       warning: '#ffc107',
+    },
+    board: {
+      lightSquare: '#ffe4c4',
+      darkSquare: '#d2691e',
+      pieceStyle: '/pieces/staunty',
     },
   },
 };

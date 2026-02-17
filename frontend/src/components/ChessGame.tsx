@@ -4,6 +4,7 @@ import { Chess, Square } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { api, Game as ApiGame } from '../api/client';
 import { GameChat } from './GameChat';
 import { ThemeSwitcher } from './ThemeSwitcher';
@@ -13,6 +14,7 @@ export function ChessGame() {
   const { gameId: urlGameId } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { currentTheme } = useTheme();
   const { socket } = useSocket();
   const [game, setGame] = useState<Chess>(new Chess());
   const [gameData, setGameData] = useState<ApiGame | null>(null);
@@ -26,6 +28,68 @@ export function ChessGame() {
   const [skillLevel] = useState(() => {
     return parseInt(localStorage.getItem('stockfishSkillLevel') || '10');
   });
+
+  // Berechne geschlagene Figuren und Materialvorteil
+  const getCapturedPieces = () => {
+    const pieceValues: { [key: string]: number } = {
+      p: 1, n: 3, b: 3, r: 5, q: 9
+    };
+
+    const initialPieces = {
+      white: { p: 8, n: 2, b: 2, r: 2, q: 1, k: 1 },
+      black: { p: 8, n: 2, b: 2, r: 2, q: 1, k: 1 }
+    };
+
+    const currentPieces = {
+      white: { p: 0, n: 0, b: 0, r: 0, q: 0, k: 0 },
+      black: { p: 0, n: 0, b: 0, r: 0, q: 0, k: 0 }
+    };
+
+    // Zähle aktuelle Figuren auf dem Board
+    const board = game.board();
+    board.forEach(row => {
+      row.forEach(square => {
+        if (square) {
+          const color = square.color === 'w' ? 'white' : 'black';
+          const type = square.type;
+          currentPieces[color][type]++;
+        }
+      });
+    });
+
+    // Berechne geschlagene Figuren
+    const captured = {
+      white: [] as string[],
+      black: [] as string[]
+    };
+
+    let whiteMaterial = 0;
+    let blackMaterial = 0;
+
+    // Geschlagene weiße Figuren (von Schwarz geschlagen)
+    (['p', 'n', 'b', 'r', 'q'] as const).forEach(piece => {
+      const capturedCount = initialPieces.white[piece] - currentPieces.white[piece];
+      for (let i = 0; i < capturedCount; i++) {
+        captured.white.push(piece);
+      }
+    });
+
+    // Geschlagene schwarze Figuren (von Weiß geschlagen)
+    (['p', 'n', 'b', 'r', 'q'] as const).forEach(piece => {
+      const capturedCount = initialPieces.black[piece] - currentPieces.black[piece];
+      for (let i = 0; i < capturedCount; i++) {
+        captured.black.push(piece);
+      }
+    });
+
+    // Berechne Materialwerte
+    captured.white.forEach(piece => blackMaterial += pieceValues[piece] || 0);
+    captured.black.forEach(piece => whiteMaterial += pieceValues[piece] || 0);
+
+    const materialAdvantage = whiteMaterial - blackMaterial;
+
+    return { captured, materialAdvantage };
+  };
 
   useEffect(() => {
     if (urlGameId) {
@@ -491,6 +555,29 @@ export function ChessGame() {
         )}
 
         <div className="board-container">
+          {/* Geschlagene Figuren - Schwarz (oben) */}
+          {(() => {
+            const { captured, materialAdvantage } = getCapturedPieces();
+            const whiteCaptured = captured.white; // Weiße Figuren, die Schwarz geschlagen hat
+            const advantage = materialAdvantage < 0 ? Math.abs(materialAdvantage) : 0;
+            
+            return (
+              <div className="captured-pieces black">
+                <div className="captured-pieces-list">
+                  {whiteCaptured.map((piece, index) => (
+                    <img
+                      key={index}
+                      src={`${currentTheme.board.pieceStyle}/w${piece.toUpperCase()}.svg`}
+                      alt={piece}
+                      className="captured-piece"
+                    />
+                  ))}
+                </div>
+                {advantage > 0 && <span className="material-advantage">+{advantage}</span>}
+              </div>
+            );
+          })()}
+
           <div className="status-bar">
             <span className="status">{status}</span>
             {isThinking && <span className="thinking">⏳</span>}
@@ -501,6 +588,8 @@ export function ChessGame() {
               onPieceDrop={onDrop}
               onSquareClick={onSquareClick}
               customSquareStyles={getSquareStyles()}
+              customDarkSquareStyle={{ backgroundColor: currentTheme.board.darkSquare }}
+              customLightSquareStyle={{ backgroundColor: currentTheme.board.lightSquare }}
               boardWidth={560}
               animationDuration={200}
               arePiecesDraggable={!isThinking && gameStatus === 'active'}
@@ -513,8 +602,118 @@ export function ChessGame() {
                 borderRadius: '8px',
                 boxShadow: '0 5px 15px rgba(0, 0, 0, 0.3)',
               }}
+              customPieces={{
+                wP: ({ squareWidth }) => (
+                  <img
+                    src={`${currentTheme.board.pieceStyle}/wP.svg`}
+                    alt="wP"
+                    style={{ width: squareWidth, height: squareWidth }}
+                  />
+                ),
+                wN: ({ squareWidth }) => (
+                  <img
+                    src={`${currentTheme.board.pieceStyle}/wN.svg`}
+                    alt="wN"
+                    style={{ width: squareWidth, height: squareWidth }}
+                  />
+                ),
+                wB: ({ squareWidth }) => (
+                  <img
+                    src={`${currentTheme.board.pieceStyle}/wB.svg`}
+                    alt="wB"
+                    style={{ width: squareWidth, height: squareWidth }}
+                  />
+                ),
+                wR: ({ squareWidth }) => (
+                  <img
+                    src={`${currentTheme.board.pieceStyle}/wR.svg`}
+                    alt="wR"
+                    style={{ width: squareWidth, height: squareWidth }}
+                  />
+                ),
+                wQ: ({ squareWidth }) => (
+                  <img
+                    src={`${currentTheme.board.pieceStyle}/wQ.svg`}
+                    alt="wQ"
+                    style={{ width: squareWidth, height: squareWidth }}
+                  />
+                ),
+                wK: ({ squareWidth }) => (
+                  <img
+                    src={`${currentTheme.board.pieceStyle}/wK.svg`}
+                    alt="wK"
+                    style={{ width: squareWidth, height: squareWidth }}
+                  />
+                ),
+                bP: ({ squareWidth }) => (
+                  <img
+                    src={`${currentTheme.board.pieceStyle}/bP.svg`}
+                    alt="bP"
+                    style={{ width: squareWidth, height: squareWidth }}
+                  />
+                ),
+                bN: ({ squareWidth }) => (
+                  <img
+                    src={`${currentTheme.board.pieceStyle}/bN.svg`}
+                    alt="bN"
+                    style={{ width: squareWidth, height: squareWidth }}
+                  />
+                ),
+                bB: ({ squareWidth }) => (
+                  <img
+                    src={`${currentTheme.board.pieceStyle}/bB.svg`}
+                    alt="bB"
+                    style={{ width: squareWidth, height: squareWidth }}
+                  />
+                ),
+                bR: ({ squareWidth }) => (
+                  <img
+                    src={`${currentTheme.board.pieceStyle}/bR.svg`}
+                    alt="bR"
+                    style={{ width: squareWidth, height: squareWidth }}
+                  />
+                ),
+                bQ: ({ squareWidth }) => (
+                  <img
+                    src={`${currentTheme.board.pieceStyle}/bQ.svg`}
+                    alt="bQ"
+                    style={{ width: squareWidth, height: squareWidth }}
+                  />
+                ),
+                bK: ({ squareWidth }) => (
+                  <img
+                    src={`${currentTheme.board.pieceStyle}/bK.svg`}
+                    alt="bK"
+                    style={{ width: squareWidth, height: squareWidth }}
+                  />
+                ),
+              }}
             />
           </div>
+
+          {/* Geschlagene Figuren - Weiß (unten) */}
+          {(() => {
+            const { captured, materialAdvantage } = getCapturedPieces();
+            const blackCaptured = captured.black; // Schwarze Figuren, die Weiß geschlagen hat
+            const advantage = materialAdvantage > 0 ? materialAdvantage : 0;
+            
+            return (
+              <div className="captured-pieces white">
+                <div className="captured-pieces-list">
+                  {blackCaptured.map((piece, index) => (
+                    <img
+                      key={index}
+                      src={`${currentTheme.board.pieceStyle}/b${piece.toUpperCase()}.svg`}
+                      alt={piece}
+                      className="captured-piece"
+                    />
+                  ))}
+                </div>
+                {advantage > 0 && <span className="material-advantage">+{advantage}</span>}
+              </div>
+            );
+          })()}
+
           <div className="controls">
             <button onClick={startNewGame} disabled={isThinking}>
               Neues Spiel

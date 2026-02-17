@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Chess } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import { api } from '../api/client';
+import { useTheme } from '../contexts/ThemeContext';
 import { ThemeSwitcher } from './ThemeSwitcher';
 import './GameAnalysis.css';
 
@@ -36,6 +37,7 @@ interface AnalysisResponse {
 export function GameAnalysis() {
   const { gameId } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
+  const { currentTheme } = useTheme();
   const [analysis, setAnalysis] = useState<AnalysisResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentMoveIndex, setCurrentMoveIndex] = useState(-1);
@@ -157,9 +159,97 @@ export function GameAnalysis() {
               position={game.fen()}
               boardWidth={560}
               arePiecesDraggable={false}
+              customDarkSquareStyle={{ backgroundColor: currentTheme.board.darkSquare }}
+              customLightSquareStyle={{ backgroundColor: currentTheme.board.lightSquare }}
               customBoardStyle={{
                 borderRadius: '8px',
                 boxShadow: '0 5px 15px rgba(0, 0, 0, 0.3)',
+              }}
+              customPieces={{
+                wP: ({ squareWidth }) => (
+                  <img
+                    src={`${currentTheme.board.pieceStyle}/wP.svg`}
+                    alt="wP"
+                    style={{ width: squareWidth, height: squareWidth }}
+                  />
+                ),
+                wN: ({ squareWidth }) => (
+                  <img
+                    src={`${currentTheme.board.pieceStyle}/wN.svg`}
+                    alt="wN"
+                    style={{ width: squareWidth, height: squareWidth }}
+                  />
+                ),
+                wB: ({ squareWidth }) => (
+                  <img
+                    src={`${currentTheme.board.pieceStyle}/wB.svg`}
+                    alt="wB"
+                    style={{ width: squareWidth, height: squareWidth }}
+                  />
+                ),
+                wR: ({ squareWidth }) => (
+                  <img
+                    src={`${currentTheme.board.pieceStyle}/wR.svg`}
+                    alt="wR"
+                    style={{ width: squareWidth, height: squareWidth }}
+                  />
+                ),
+                wQ: ({ squareWidth }) => (
+                  <img
+                    src={`${currentTheme.board.pieceStyle}/wQ.svg`}
+                    alt="wQ"
+                    style={{ width: squareWidth, height: squareWidth }}
+                  />
+                ),
+                wK: ({ squareWidth }) => (
+                  <img
+                    src={`${currentTheme.board.pieceStyle}/wK.svg`}
+                    alt="wK"
+                    style={{ width: squareWidth, height: squareWidth }}
+                  />
+                ),
+                bP: ({ squareWidth }) => (
+                  <img
+                    src={`${currentTheme.board.pieceStyle}/bP.svg`}
+                    alt="bP"
+                    style={{ width: squareWidth, height: squareWidth }}
+                  />
+                ),
+                bN: ({ squareWidth }) => (
+                  <img
+                    src={`${currentTheme.board.pieceStyle}/bN.svg`}
+                    alt="bN"
+                    style={{ width: squareWidth, height: squareWidth }}
+                  />
+                ),
+                bB: ({ squareWidth }) => (
+                  <img
+                    src={`${currentTheme.board.pieceStyle}/bB.svg`}
+                    alt="bB"
+                    style={{ width: squareWidth, height: squareWidth }}
+                  />
+                ),
+                bR: ({ squareWidth }) => (
+                  <img
+                    src={`${currentTheme.board.pieceStyle}/bR.svg`}
+                    alt="bR"
+                    style={{ width: squareWidth, height: squareWidth }}
+                  />
+                ),
+                bQ: ({ squareWidth }) => (
+                  <img
+                    src={`${currentTheme.board.pieceStyle}/bQ.svg`}
+                    alt="bQ"
+                    style={{ width: squareWidth, height: squareWidth }}
+                  />
+                ),
+                bK: ({ squareWidth }) => (
+                  <img
+                    src={`${currentTheme.board.pieceStyle}/bK.svg`}
+                    alt="bK"
+                    style={{ width: squareWidth, height: squareWidth }}
+                  />
+                ),
               }}
             />
           </div>
