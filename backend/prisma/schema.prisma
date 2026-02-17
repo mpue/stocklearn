@@ -8,16 +8,26 @@ datasource db {
 }
 
 model User {
-  id            String   @id @default(uuid())
-  email         String   @unique
-  username      String   @unique
-  password      String
-  isAdmin       Boolean  @default(false)
-  isActive      Boolean  @default(true)
-  gamesAsWhite  Game[]   @relation("WhitePlayer")
-  gamesAsBlack  Game[]   @relation("BlackPlayer")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                 String    @id @default(uuid())
+  email              String    @unique
+  username           String    @unique
+  password           String
+  isAdmin            Boolean   @default(false)
+  isActive           Boolean   @default(true)
+  inviteToken        String?   @unique
+  inviteTokenExpiry  DateTime?
+  gamesAsWhite       Game[]    @relation("WhitePlayer")
+  gamesAsBlack       Game[]    @relation("BlackPlayer")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
+model Setting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Game {

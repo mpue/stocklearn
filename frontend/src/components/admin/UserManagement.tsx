@@ -7,6 +7,7 @@ interface AdminUser {
   username: string;
   isAdmin: boolean;
   isActive: boolean;
+  inviteToken?: string | null;
   createdAt: string;
   updatedAt: string;
   _count: {
@@ -30,6 +31,11 @@ interface EditUserData {
   isActive: boolean;
 }
 
+interface CreateUserData {
+  email: string;
+  username: string;
+}
+
 export function UserManagement() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 20, total: 0, totalPages: 0 });
@@ -38,6 +44,7 @@ export function UserManagement() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   
   // Edit modal state
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
@@ -45,8 +52,18 @@ export function UserManagement() {
   const [editError, setEditError] = useState('');
   const [editLoading, setEditLoading] = useState(false);
 
+  // Create modal state
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createData, setCreateData] = useState<CreateUserData>({ email: '', username: '' });
+  const [createError, setCreateError] = useState('');
+  const [createLoading, setCreateLoading] = useState(false);
+
   // Delete confirmation
   const [deletingUser, setDeletingUser] = useState<AdminUser | null>(null);
+
+  // Invite state
+  const [invitingUserId, setInvitingUserId] = useState<string | null>(null);
+  const [inviteResult, setInviteResult] = useState<{ url: string; emailSent: boolean; message: string } | null>(null);
 
   const loadUsers = useCallback(async () => {
     try {
@@ -147,6 +164,50 @@ export function UserManagement() {
     }
   };
 
+  const handleCreateUser = async () => {
+    try {
+      setCreateLoading(true);
+      setCreateError('');
+      if (!createData.email || !createData.username) {
+        setCreateError('E-Mail und Benutzername sind erforderlich.');
+        return;
+      }
+      await api.adminCreateUser(createData);
+      setShowCreateModal(false);
+      setCreateData({ email: '', username: '' });
+      setSuccessMessage('Benutzer erfolgreich erstellt (inaktiv). Sie können jetzt eine Einladung senden.');
+      loadUsers();
+      setTimeout(() => setSuccessMessage(''), 5000);
+    } catch (err: any) {
+      setCreateError(err.message || 'Fehler beim Erstellen');
+    } finally {
+      setCreateLoading(false);
+    }
+  };
+
+  const handleInvite = async (userId: string) => {
+    try {
+      setInvitingUserId(userId);
+      setError('');
+      const result = await api.adminInviteUser(userId);
+      setInviteResult({
+        url: result.inviteUrl,
+        emailSent: result.emailSent,
+        message: result.message,
+      });
+    } catch (err: any) {
+      setError(err.message || 'Fehler beim Senden der Einladung');
+    } finally {
+      setInvitingUserId(null);
+    }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setSuccessMessage('Link in die Zwischenablage kopiert!');
+    setTimeout(() => setSuccessMessage(''), 3000);
+  };
+
   const getSortIndicator = (column: string) => {
     if (sortBy !== column) return '';
     return sortOrder === 'asc' ? ' ▲' : ' ▼';
@@ -164,7 +225,7 @@ export function UserManagement() {
 
   return (
     <div className="admin-module">
-      {/* Search Bar */}
+      {/* Search Bar + Create Button */}
       <div className="admin-toolbar">
         <input
           type="text"
@@ -173,9 +234,16 @@ export function UserManagement() {
           onChange={(e) => handleSearch(e.target.value)}
           className="admin-search-input"
         />
+        <button
+          className="admin-btn-primary"
+          onClick={() => { setShowCreateModal(true); setCreateError(''); setCreateData({ email: '', username: '' }); }}
+        >
+          + Neuer Benutzer
+        </button>
       </div>
 
       {error && <div className="admin-error">{error}</div>}
+      {successMessage && <div className="admin-message admin-message-success">{successMessage}</div>}
 
       {/* Users Table */}
       <div className="admin-table-wrapper">
@@ -238,6 +306,16 @@ export function UserManagement() {
                     >
                       {user.isActive ? '🔒' : '🔓'}
                     </button>
+                    {!user.isActive && (
+                      <button
+                        className="admin-btn admin-btn-invite"
+                        onClick={() => handleInvite(user.id)}
+                        disabled={invitingUserId === user.id}
+                        title="Einladung senden"
+                      >
+                        {invitingUserId === user.id ? '⏳' : '📧'}
+                      </button>
+                    )}
                     <button
                       className="admin-btn admin-btn-delete"
                       onClick={() => setDeletingUser(user)}
@@ -368,6 +446,101 @@ export function UserManagement() {
               </button>
               <button className="admin-btn admin-btn-delete-confirm" onClick={handleDelete}>
                 Endgültig löschen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create User Modal */}
+      {showCreateModal && (
+        <div className="admin-modal-overlay" onClick={() => setShowCreateModal(false)}>
+          <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="admin-modal-header">
+              <h2>Neuer Benutzer</h2>
+              <button className="admin-modal-close" onClick={() => setShowCreateModal(false)}>×</button>
+            </div>
+            <div className="admin-modal-body">
+              {createError && <div className="admin-error">{createError}</div>}
+              <p style={{ color: 'rgba(255,255,255,0.6)', marginBottom: '16px', fontSize: '0.9rem' }}>
+                Der Benutzer wird als <strong>inaktiv</strong> erstellt. Sie können ihm anschließend eine Einladung senden,
+                damit er sein Passwort setzen und seinen Account aktivieren kann.
+              </p>
+              <div className="admin-form-group">
+                <label>Benutzername</label>
+                <input
+                  type="text"
+                  value={createData.username}
+                  onChange={(e) => setCreateData({ ...createData, username: e.target.value })}
+                  placeholder="Benutzername"
+                />
+              </div>
+              <div className="admin-form-group">
+                <label>E-Mail</label>
+                <input
+                  type="email"
+                  value={createData.email}
+                  onChange={(e) => setCreateData({ ...createData, email: e.target.value })}
+                  placeholder="benutzer@beispiel.de"
+                />
+              </div>
+            </div>
+            <div className="admin-modal-footer">
+              <button className="admin-btn admin-btn-cancel" onClick={() => setShowCreateModal(false)}>
+                Abbrechen
+              </button>
+              <button
+                className="admin-btn admin-btn-save"
+                onClick={handleCreateUser}
+                disabled={createLoading}
+              >
+                {createLoading ? 'Erstelle...' : 'Benutzer erstellen'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Invite Result Modal */}
+      {inviteResult && (
+        <div className="admin-modal-overlay" onClick={() => setInviteResult(null)}>
+          <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="admin-modal-header">
+              <h2>📧 Einladung</h2>
+              <button className="admin-modal-close" onClick={() => setInviteResult(null)}>×</button>
+            </div>
+            <div className="admin-modal-body">
+              <div className={`admin-message ${inviteResult.emailSent ? 'admin-message-success' : 'admin-message-error'}`}>
+                {inviteResult.message}
+              </div>
+
+              <div className="admin-form-group" style={{ marginTop: '16px' }}>
+                <label>Einladungslink</label>
+                <div className="admin-invite-link-row">
+                  <input
+                    type="text"
+                    value={inviteResult.url}
+                    readOnly
+                    onClick={(e) => (e.target as HTMLInputElement).select()}
+                  />
+                  <button
+                    className="admin-btn-primary"
+                    onClick={() => copyToClipboard(inviteResult.url)}
+                    style={{ whiteSpace: 'nowrap' }}
+                  >
+                    📋 Kopieren
+                  </button>
+                </div>
+                <span className="admin-field-hint">
+                  {inviteResult.emailSent
+                    ? 'Der Link wurde auch per E-Mail gesendet.'
+                    : 'Bitte senden Sie diesen Link manuell an den Benutzer.'}
+                </span>
+              </div>
+            </div>
+            <div className="admin-modal-footer">
+              <button className="admin-btn admin-btn-save" onClick={() => setInviteResult(null)}>
+                Schließen
               </button>
             </div>
           </div>

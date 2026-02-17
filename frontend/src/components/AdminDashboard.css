@@ -998,3 +998,171 @@
   line-height: 1.5;
   font-style: italic;
 }
+
+/* ==================== SETTINGS ==================== */
+
+.admin-settings-section {
+  margin-bottom: 32px;
+}
+
+.admin-settings-section h2 {
+  font-size: 1.3rem;
+  color: white;
+  margin-bottom: 8px;
+}
+
+.admin-settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .admin-settings-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.admin-settings-grid .admin-form-checkbox {
+  grid-column: 1 / -1;
+}
+
+.admin-field-hint {
+  display: block;
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.4);
+  margin-top: 4px;
+}
+
+.admin-textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+  font-size: 0.95rem;
+  font-family: monospace;
+  outline: none;
+  transition: border-color 0.2s ease;
+  resize: vertical;
+  min-height: 120px;
+}
+
+.admin-textarea:focus {
+  border-color: #667eea;
+}
+
+.admin-code {
+  background: rgba(102, 126, 234, 0.15);
+  color: #667eea;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-family: monospace;
+  margin: 0 2px;
+}
+
+.admin-test-email {
+  margin-top: 24px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+}
+
+.admin-test-email h3 {
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.8);
+  margin-bottom: 12px;
+}
+
+.admin-test-email-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.admin-test-email-row .admin-search-input {
+  flex: 1;
+}
+
+.admin-settings-actions {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ==================== INVITE BUTTON ==================== */
+
+.admin-btn-invite {
+  background: rgba(52, 152, 219, 0.15);
+}
+
+.admin-btn-invite:hover:not(:disabled) {
+  background: rgba(52, 152, 219, 0.3);
+}
+
+.admin-btn-invite:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.admin-invite-link-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.admin-invite-link-row input {
+  flex: 1;
+}
+
+/* ==================== PASSWORD REQUIREMENTS ==================== */
+
+.password-requirements {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.password-requirements p {
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 0 0 8px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.password-requirements ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.password-requirements li {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.4);
+  padding: 2px 0 2px 20px;
+  position: relative;
+}
+
+.password-requirements li::before {
+  content: '○';
+  position: absolute;
+  left: 0;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.password-requirements li.met {
+  color: #2ed573;
+}
+
+.password-requirements li.met::before {
+  content: '●';
+  color: #2ed573;
+}

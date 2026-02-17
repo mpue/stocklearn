@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
+import nodemailer from 'nodemailer';
 import { authenticateToken, AuthRequest } from '../middleware/auth.middleware.js';
 import { requireAdmin } from '../middleware/admin.middleware.js';
 
@@ -75,6 +77,79 @@ router.post('/setup/create-admin', async (req, res) => {
       return res.status(400).json({ error: 'E-Mail oder Benutzername ist bereits vergeben.' });
     }
     res.status(500).json({ error: 'Fehler beim Erstellen des Admin-Benutzers.' });
+  }
+});
+
+// ==================== INVITE ACCEPT (public, no auth) ====================
+
+// Validate invite token
+router.get('/invite/validate/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    const user = await prisma.user.findUnique({
+      where: { inviteToken: token },
+      select: { id: true, username: true, email: true, inviteTokenExpiry: true }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'Ungültiger Einladungslink.' });
+    }
+
+    if (user.inviteTokenExpiry && user.inviteTokenExpiry < new Date()) {
+      return res.status(410).json({ error: 'Der Einladungslink ist abgelaufen.' });
+    }
+
+    res.json({ valid: true, username: user.username, email: user.email });
+  } catch (error) {
+    console.error('Invite validate error:', error);
+    res.status(500).json({ error: 'Fehler beim Validieren des Einladungslinks.' });
+  }
+});
+
+// Accept invite and set password
+router.post('/invite/accept/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { password } = req.body;
+
+    if (!password || password.length < 8) {
+      return res.status(400).json({ error: 'Passwort muss mindestens 8 Zeichen lang sein.' });
+    }
+
+    // Check password strength: at least one uppercase, one lowercase, one digit
+    const strongPassword = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+    if (!strongPassword.test(password)) {
+      return res.status(400).json({ error: 'Passwort muss mindestens einen Großbuchstaben, einen Kleinbuchstaben und eine Zahl enthalten.' });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { inviteToken: token }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'Ungültiger Einladungslink.' });
+    }
+
+    if (user.inviteTokenExpiry && user.inviteTokenExpiry < new Date()) {
+      return res.status(410).json({ error: 'Der Einladungslink ist abgelaufen.' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+        isActive: true,
+        inviteToken: null,
+        inviteTokenExpiry: null,
+      }
+    });
+
+    res.json({ message: 'Passwort erfolgreich gesetzt. Sie können sich jetzt anmelden.' });
+  } catch (error) {
+    console.error('Invite accept error:', error);
+    res.status(500).json({ error: 'Fehler beim Setzen des Passworts.' });
   }
 });
 
@@ -410,6 +485,257 @@ router.get('/stats', async (req: AuthRequest, res) => {
   } catch (error) {
     console.error('Admin: Error fetching stats:', error);
     res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+});
+
+// ==================== USER CREATION & INVITATION ====================
+
+// Create new user (admin creates user, inactive by default)
+router.post('/users', async (req: AuthRequest, res) => {
+  try {
+    const { email, username, password } = req.body;
+
+    if (!email || !username) {
+      return res.status(400).json({ error: 'E-Mail und Benutzername sind erforderlich.' });
+    }
+
+    const existingUser = await prisma.user.findFirst({
+      where: { OR: [{ email }, { username }] }
+    });
+
+    if (existingUser) {
+      return res.status(400).json({ error: 'E-Mail oder Benutzername ist bereits vergeben.' });
+    }
+
+    // Generate a random password placeholder (user will set their own on invite accept)
+    const tempPassword = password || crypto.randomBytes(32).toString('hex');
+    const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+    const user = await prisma.user.create({
+      data: {
+        email,
+        username,
+        password: hashedPassword,
+        isActive: false,
+        isAdmin: false,
+      },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        isAdmin: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: {
+          select: {
+            gamesAsWhite: true,
+            gamesAsBlack: true,
+          }
+        }
+      }
+    });
+
+    res.json(user);
+  } catch (error: any) {
+    console.error('Admin: Error creating user:', error);
+    if (error.code === 'P2002') {
+      return res.status(400).json({ error: 'E-Mail oder Benutzername ist bereits vergeben.' });
+    }
+    res.status(500).json({ error: 'Fehler beim Erstellen des Benutzers.' });
+  }
+});
+
+// Send invitation email to user
+router.post('/users/:id/invite', async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      return res.status(404).json({ error: 'Benutzer nicht gefunden.' });
+    }
+
+    // Generate invite token
+    const inviteToken = crypto.randomBytes(32).toString('hex');
+    const inviteTokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    await prisma.user.update({
+      where: { id },
+      data: {
+        inviteToken,
+        inviteTokenExpiry,
+      }
+    });
+
+    // Load email settings
+    const settings = await prisma.setting.findMany({
+      where: {
+        key: {
+          in: [
+            'smtp_host', 'smtp_port', 'smtp_user', 'smtp_password',
+            'smtp_secure', 'smtp_from_email', 'smtp_from_name',
+            'invite_email_subject', 'invite_email_template', 'app_url'
+          ]
+        }
+      }
+    });
+
+    const settingsMap: Record<string, string> = {};
+    settings.forEach(s => { settingsMap[s.key] = s.value; });
+
+    const appUrl = settingsMap['app_url'] || 'http://localhost:3005';
+    const inviteUrl = `${appUrl}/invite/${inviteToken}`;
+
+    // Check if SMTP is configured
+    if (!settingsMap['smtp_host'] || !settingsMap['smtp_port']) {
+      return res.json({
+        message: 'Einladungslink erstellt, aber E-Mail-Versand nicht konfiguriert.',
+        inviteUrl,
+        emailSent: false
+      });
+    }
+
+    // Try to send email
+    try {
+      const transporter = nodemailer.createTransport({
+        host: settingsMap['smtp_host'],
+        port: parseInt(settingsMap['smtp_port'] || '587'),
+        secure: settingsMap['smtp_secure'] === 'true',
+        auth: {
+          user: settingsMap['smtp_user'],
+          pass: settingsMap['smtp_password'],
+        },
+      });
+
+      const subject = settingsMap['invite_email_subject'] || 'Willkommen bei Stocklearn!';
+      let template = settingsMap['invite_email_template'] ||
+        'Hallo {{username}},\n\nfür dich wurde ein Benutzerkonto bei Stocklearn erstellt.\n\nBitte klicke auf den folgenden Link, um dein Passwort zu setzen und deinen Account zu aktivieren:\n\n{{inviteUrl}}\n\nDer Link ist 7 Tage gültig.\n\nViel Spaß beim Schachspielen!';
+
+      // Replace template variables
+      template = template.replace(/\{\{username\}\}/g, user.username);
+      template = template.replace(/\{\{email\}\}/g, user.email);
+      template = template.replace(/\{\{inviteUrl\}\}/g, inviteUrl);
+
+      await transporter.sendMail({
+        from: `"${settingsMap['smtp_from_name'] || 'Stocklearn'}" <${settingsMap['smtp_from_email'] || settingsMap['smtp_user']}>`,
+        to: user.email,
+        subject,
+        text: template,
+      });
+
+      res.json({
+        message: 'Einladung erfolgreich gesendet.',
+        inviteUrl,
+        emailSent: true
+      });
+    } catch (emailError: any) {
+      console.error('Email send error:', emailError);
+      res.json({
+        message: 'Einladungslink erstellt, aber E-Mail konnte nicht gesendet werden: ' + emailError.message,
+        inviteUrl,
+        emailSent: false
+      });
+    }
+  } catch (error) {
+    console.error('Admin: Error inviting user:', error);
+    res.status(500).json({ error: 'Fehler beim Einladen des Benutzers.' });
+  }
+});
+
+// ==================== SETTINGS ====================
+
+// Get all settings
+router.get('/settings', async (req: AuthRequest, res) => {
+  try {
+    const settings = await prisma.setting.findMany({
+      orderBy: { key: 'asc' }
+    });
+
+    // Convert to key-value map, mask password
+    const settingsMap: Record<string, string> = {};
+    settings.forEach(s => {
+      if (s.key === 'smtp_password') {
+        settingsMap[s.key] = s.value ? '********' : '';
+      } else {
+        settingsMap[s.key] = s.value;
+      }
+    });
+
+    res.json(settingsMap);
+  } catch (error) {
+    console.error('Admin: Error fetching settings:', error);
+    res.status(500).json({ error: 'Failed to fetch settings' });
+  }
+});
+
+// Update settings (bulk upsert)
+router.put('/settings', async (req: AuthRequest, res) => {
+  try {
+    const settingsData: Record<string, string> = req.body;
+
+    const operations = Object.entries(settingsData).map(([key, value]) => {
+      // Don't overwrite password with masked value
+      if (key === 'smtp_password' && value === '********') {
+        return null;
+      }
+      return prisma.setting.upsert({
+        where: { key },
+        update: { value: String(value) },
+        create: { key, value: String(value) },
+      });
+    }).filter(Boolean);
+
+    await Promise.all(operations as any[]);
+
+    res.json({ message: 'Einstellungen gespeichert.' });
+  } catch (error) {
+    console.error('Admin: Error updating settings:', error);
+    res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
+// Test SMTP connection
+router.post('/settings/test-email', async (req: AuthRequest, res) => {
+  try {
+    const { to } = req.body;
+
+    const settings = await prisma.setting.findMany({
+      where: {
+        key: {
+          in: ['smtp_host', 'smtp_port', 'smtp_user', 'smtp_password', 'smtp_secure', 'smtp_from_email', 'smtp_from_name']
+        }
+      }
+    });
+
+    const settingsMap: Record<string, string> = {};
+    settings.forEach(s => { settingsMap[s.key] = s.value; });
+
+    if (!settingsMap['smtp_host'] || !settingsMap['smtp_port']) {
+      return res.status(400).json({ error: 'SMTP-Server ist nicht konfiguriert.' });
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: settingsMap['smtp_host'],
+      port: parseInt(settingsMap['smtp_port'] || '587'),
+      secure: settingsMap['smtp_secure'] === 'true',
+      auth: {
+        user: settingsMap['smtp_user'],
+        pass: settingsMap['smtp_password'],
+      },
+    });
+
+    await transporter.sendMail({
+      from: `"${settingsMap['smtp_from_name'] || 'Stocklearn'}" <${settingsMap['smtp_from_email'] || settingsMap['smtp_user']}>`,
+      to: to || settingsMap['smtp_user'],
+      subject: 'Stocklearn - Test E-Mail',
+      text: 'Dies ist eine Test-E-Mail von Stocklearn. Die SMTP-Konfiguration funktioniert korrekt!',
+    });
+
+    res.json({ message: 'Test-E-Mail erfolgreich gesendet.' });
+  } catch (error: any) {
+    console.error('Admin: Error sending test email:', error);
+    res.status(500).json({ error: 'Fehler beim Senden der Test-E-Mail: ' + error.message });
   }
 });
 

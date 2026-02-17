@@ -29,7 +29,10 @@ Die folgenden Module sollen zur Verfügung stehen:
   - Aktiv Flag togglen
   - Bearbeiten
 
-Klick auf "Bearbeiten" öffnet einen Modalen Dialog um den Benutzer zu bearbeiten. Der Rest erklärt sich von selbst.
+Klick auf "Bearbeiten" öffnet einen Modalen Dialog um den Benutzer zu bearbeiten. 
+
+Wenn der Benutzer erstellt wurde bleibt er so lange inaktiv, bis er entweder manuell aktiviert wurde,
+oder auf den Bestätigungslink wie in 3.7 beschrieben klickt.
 
 ### 2.2. Spielverwaltung
 
@@ -90,7 +93,7 @@ Falls nicht, wird der **Setup-Assistent** angezeigt, über den der erste Admin-B
 4. Nach erfolgreicher Erstellung wird zur Login-Seite weitergeleitet
 5. Der Setup-Endpoint ist nach Erstellung des ersten Admins automatisch deaktiviert
 
-**Sicherheit:** Der `POST /api/admin/setup/create-admin`-Endpoint funktioniert ausschließlich, wenn noch kein Admin-Benutzer in der Datenbank existiert. Nach der Ersteinrichtung gibt er `403 Forbidden` zurück.
+**Sicherheit:** Der `POST /api/admin/setup/create-admin`-Endpoint funktioniert ausschließlich, wenn noch kein Admin-Benutzer in der Datenbank existiert. Nach der Ersteinrichtung gibt er `403 Forbidden` zurück.3#
 
 ### 3.5 Admin-Benutzer manuell erstellen (Alternative)
 
@@ -104,3 +107,15 @@ Oder über die Docker-Umgebung:
 ```bash
 docker exec -it stocklearn-db psql -U stocklearn -d stocklearn -c "UPDATE \"User\" SET \"isAdmin\" = true WHERE email = 'admin@example.com';"
 ```
+
+### 3.6 Einstellungen
+
+Es gibt einen Tab "Einstellungen" hier können alle relevanten Einstellungen vorgenommen werden. Unter anderem können hier auch die E-Mail Server Einstellungen vorgenommen werden. Diese Einstellungen werden global verwendet, wenn Mails versendet werden. Hier ist auch die Mail Vorlage zu erstellen, die man dem Benutzer verschiktm um ihn darauf hinzuweisein, daß für ihn ein Benutzeraccount angelegt wurde.
+
+### 3.7 Benutzer anlegen und einladen
+
+In der Benutzerverwaltung kann ein Benutzer auch uber einen Button "Neuer Benutzer" angelegt werden, ist der Benutzer angelegt worden, kann ihm 
+aus der Benutzertabelle heraus eine Willkommensnachricht gesendet werden, diese Mail enthält einen Link, der, wenn man ihn anklickt auf eine 
+Seite führt, auf der der Benutzer ein Passwort vergeben muss. Hat der Benutzer ein sicheres Passwort vergeben, so wird er aktiv geschaltet und 
+in die Lobby weitergeleitet.
+

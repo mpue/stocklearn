@@ -5,10 +5,11 @@ import { api } from '../api/client';
 import { UserManagement } from './admin/UserManagement';
 import { GameManagement } from './admin/GameManagement';
 import { BackupRestore } from './admin/BackupRestore';
+import { Settings } from './admin/Settings';
 import { AdminSetup } from './admin/AdminSetup';
 import './AdminDashboard.css';
 
-type AdminModule = 'users' | 'games' | 'backup';
+type AdminModule = 'users' | 'games' | 'backup' | 'settings';
 
 interface Stats {
   users: number;
@@ -65,6 +66,7 @@ export function AdminDashboard() {
     { key: 'users', label: 'Benutzerverwaltung', icon: '👥' },
     { key: 'games', label: 'Spielverwaltung', icon: '♟️' },
     { key: 'backup', label: 'Backup / Restore', icon: '💾' },
+    { key: 'settings', label: 'Einstellungen', icon: '⚙️' },
   ];
 
   // Show loading while checking setup status
@@ -150,6 +152,7 @@ export function AdminDashboard() {
           {activeModule === 'users' && <UserManagement />}
           {activeModule === 'games' && <GameManagement />}
           {activeModule === 'backup' && <BackupRestore />}
+          {activeModule === 'settings' && <Settings />}
         </div>
       </main>
     </div>

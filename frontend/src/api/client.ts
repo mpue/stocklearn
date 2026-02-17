@@ -363,4 +363,90 @@ export const api = {
     }
     return response.json();
   },
+
+  // Settings
+  async adminGetSettings(): Promise<Record<string, string>> {
+    const response = await fetch(`${API_URL}/api/admin/settings`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to fetch settings');
+    }
+    return response.json();
+  },
+
+  async adminUpdateSettings(settings: Record<string, string>): Promise<any> {
+    const response = await fetch(`${API_URL}/api/admin/settings`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(settings),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to update settings');
+    }
+    return response.json();
+  },
+
+  async adminTestEmail(to?: string): Promise<any> {
+    const response = await fetch(`${API_URL}/api/admin/settings/test-email`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ to }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to send test email');
+    }
+    return response.json();
+  },
+
+  // User creation & invitation
+  async adminCreateUser(data: { email: string; username: string }): Promise<any> {
+    const response = await fetch(`${API_URL}/api/admin/users`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to create user');
+    }
+    return response.json();
+  },
+
+  async adminInviteUser(userId: string): Promise<{ message: string; inviteUrl: string; emailSent: boolean }> {
+    const response = await fetch(`${API_URL}/api/admin/users/${userId}/invite`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to invite user');
+    }
+    return response.json();
+  },
+
+  // Invite accept (public)
+  async validateInviteToken(token: string): Promise<{ valid: boolean; username: string; email: string }> {
+    const response = await fetch(`${API_URL}/api/admin/invite/validate/${token}`);
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Invalid invite token');
+    }
+    return response.json();
+  },
+
+  async acceptInvite(token: string, password: string): Promise<any> {
+    const response = await fetch(`${API_URL}/api/admin/invite/accept/${token}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to accept invite');
+    }
+    return response.json();
+  },
 };

@@ -9,6 +9,7 @@ import { Dashboard } from './components/Dashboard'
 import { ChessGame } from './components/ChessGame'
 import { GameAnalysis } from './components/GameAnalysis'
 import { AdminDashboard } from './components/AdminDashboard'
+import { InviteAccept } from './components/InviteAccept'
 import './App.css'
 
 function App() {
@@ -52,6 +53,10 @@ function App() {
             <Route 
               path="/admin" 
               element={<AdminDashboard />}
+            />
+            <Route 
+              path="/invite/:token" 
+              element={<InviteAccept />}
             />
           </Routes>
         </BrowserRouter>
