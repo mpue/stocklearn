@@ -503,51 +503,68 @@ app.post('/api/games/:id/analyze', authenticateToken, async (req: AuthRequest, r
     // Prüfen ob User am Spiel beteiligt ist
     const isParticipant = game.whitePlayerId === req.userId || game.blackPlayerId === req.userId;
     if (!isParticipant) {
+      console.log(`Access denied: userId=${req.userId}, whitePlayerId=${game.whitePlayerId}, blackPlayerId=${game.blackPlayerId}`);
       return res.status(403).json({ error: 'Access denied' });
     }
 
     const chess = new Chess();
     const analysis: any[] = [];
     
-    // Startposition analysieren
-    const startEval = await stockfishEngine.evaluatePosition(chess.fen(), 15);
+    // Nur Spielerzüge analysieren, max 200 Züge (100 pro Seite)
+    const movesToAnalyze = game.moves.slice(0, 200);
     
-    for (const move of game.moves) {
-      // Position vor dem Zug
-      const positionBefore = chess.fen();
+    console.log(`Starting analysis for game ${id} (${movesToAnalyze.length} moves)`);
+    
+    // Startposition analysieren - wird als Referenz für den ersten Zug benötigt
+    let prevEval: { evaluation: number; bestMove: string; mate?: number };
+    try {
+      prevEval = await stockfishEngine.evaluatePosition(chess.fen(), 8);
+    } catch (err) {
+      console.error('Failed to evaluate start position:', err);
+      prevEval = { evaluation: 0, bestMove: '', mate: undefined };
+    }
+    
+    for (let i = 0; i < movesToAnalyze.length; i++) {
+      const move = movesToAnalyze[i];
+      // Position vor dem Zug merken + bester Zug der Engine
+      const bestMoveForPosition = prevEval.bestMove;
+      const bestMoveEval = prevEval.evaluation;
       const turn = chess.turn();
       
       // Zug ausführen
-      chess.move({
-        from: move.from,
-        to: move.to,
-        promotion: move.san.includes('=') ? 'q' : undefined
-      });
+      try {
+        chess.move({
+          from: move.from,
+          to: move.to,
+          promotion: move.san.includes('=') ? 'q' : undefined
+        });
+      } catch (err) {
+        console.error(`Failed to apply move ${move.san} at position ${i}:`, err);
+        break;
+      }
       
       // Position nach dem Zug evaluieren
       const positionAfter = chess.fen();
-      const evaluation = await stockfishEngine.evaluatePosition(positionAfter, 15);
+      let evaluation: { evaluation: number; bestMove: string; mate?: number };
+      try {
+        evaluation = await stockfishEngine.evaluatePosition(positionAfter, 8);
+      } catch (err) {
+        console.error(`Failed to evaluate position after move ${i}:`, err);
+        evaluation = { evaluation: prevEval.evaluation, bestMove: '', mate: undefined };
+      }
       
-      // Beste Alternative finden
-      const alternativeEval = await stockfishEngine.evaluatePosition(positionBefore, 15);
-      
-      // Fehlerklassifizierung
+      // Fehlerklassifizierung basierend auf Eval-Differenz
       let classification = 'good';
       let evalDiff = 0;
       
-      if (game.moves.length > 1) {
-        const prevMove = analysis[analysis.length - 1];
-        if (prevMove) {
-          evalDiff = turn === 'w' 
-            ? (evaluation.evaluation - prevMove.evaluation)
-            : (prevMove.evaluation - evaluation.evaluation);
-          
-          if (evalDiff < -3) classification = 'blunder';
-          else if (evalDiff < -1.5) classification = 'mistake';
-          else if (evalDiff < -0.5) classification = 'inaccuracy';
-          else if (evalDiff > 0.5) classification = 'brilliant';
-        }
-      }
+      evalDiff = turn === 'w' 
+        ? (evaluation.evaluation - prevEval.evaluation)
+        : (prevEval.evaluation - evaluation.evaluation);
+      
+      if (evalDiff < -3) classification = 'blunder';
+      else if (evalDiff < -1.5) classification = 'mistake';
+      else if (evalDiff < -0.5) classification = 'inaccuracy';
+      else if (evalDiff > 0.5) classification = 'brilliant';
       
       analysis.push({
         moveNumber: move.moveNumber,
@@ -557,13 +574,24 @@ app.post('/api/games/:id/analyze', authenticateToken, async (req: AuthRequest, r
         isPlayerMove: move.isPlayerMove,
         evaluation: evaluation.evaluation,
         mate: evaluation.mate,
-        bestMove: alternativeEval.bestMove,
-        bestMoveEval: alternativeEval.evaluation,
+        bestMove: bestMoveForPosition,
+        bestMoveEval: bestMoveEval,
         classification,
         evalDiff,
         fen: positionAfter
       });
+
+      // Aktuelle Eval als Referenz für den nächsten Zug
+      prevEval = evaluation;
+      
+      // Fortschritt loggen
+      if ((i + 1) % 20 === 0) {
+        console.log(`Analysis progress: ${i + 1}/${movesToAnalyze.length} moves analyzed`);
+      }
     }
+    
+    console.log(`Analysis complete for game ${id}`);
+    
 
     res.json({
       gameId: id,
@@ -699,4 +727,13 @@ process.on('SIGTERM', async () => {
   await prisma.$disconnect();
   stockfishEngine.close();
   process.exit(0);
+});
+
+// Prevent crash on unhandled errors
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });

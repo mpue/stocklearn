@@ -52,12 +52,35 @@ export function GameAnalysis() {
   const analyzeGame = async (id: string) => {
     try {
       setLoading(true);
-      const result = await api.analyzeGame(id);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 Minuten Timeout
+      
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3004'}/api/games/${id}/analyze`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('authToken')}`,
+        },
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        throw new Error('Failed to analyze game');
+      }
+      
+      const result = await response.json();
       setAnalysis(result);
       setCurrentMoveIndex(-1);
       setGame(new Chess());
-    } catch (error) {
-      console.error('Error analyzing game:', error);
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        console.error('Analysis timeout - took too long');
+      } else {
+        console.error('Error analyzing game:', error);
+      }
     } finally {
       setLoading(false);
     }
