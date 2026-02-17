@@ -545,9 +545,16 @@ app.post('/api/games/:id/analyze', authenticateToken, async (req: AuthRequest, r
       
       // Position nach dem Zug evaluieren
       const positionAfter = chess.fen();
+      // chess.turn() gibt jetzt den Spieler an, der ALS NÄCHSTES dran ist (nach dem Zug)
+      const sideToMoveAfter = chess.turn(); // 'w' oder 'b'
       let evaluation: { evaluation: number; bestMove: string; mate?: number };
       try {
         evaluation = await stockfishEngine.evaluatePosition(positionAfter, 8);
+        // Stockfish gibt Eval aus Sicht des Spielers am Zug
+        // Wir normalisieren auf Weiß-Perspektive
+        if (sideToMoveAfter === 'b') {
+          evaluation = { ...evaluation, evaluation: -evaluation.evaluation, mate: evaluation.mate !== undefined ? -evaluation.mate : undefined };
+        }
       } catch (err) {
         console.error(`Failed to evaluate position after move ${i}:`, err);
         evaluation = { evaluation: prevEval.evaluation, bestMove: '', mate: undefined };
@@ -556,10 +563,15 @@ app.post('/api/games/:id/analyze', authenticateToken, async (req: AuthRequest, r
       // Fehlerklassifizierung basierend auf Eval-Differenz
       let classification = 'good';
       let evalDiff = 0;
-      
-      evalDiff = turn === 'w' 
-        ? (evaluation.evaluation - prevEval.evaluation)
-        : (prevEval.evaluation - evaluation.evaluation);
+
+      // Beide Evals sind jetzt aus Weiß-Perspektive normalisiert
+      // Für Weiß: positiver evalDiff = gut, negativer = schlecht
+      // Für Schwarz: invertiert
+      if (turn === 'w') {
+        evalDiff = evaluation.evaluation - prevEval.evaluation;
+      } else {
+        evalDiff = prevEval.evaluation - evaluation.evaluation;
+      }
       
       if (evalDiff < -3) classification = 'blunder';
       else if (evalDiff < -1.5) classification = 'mistake';

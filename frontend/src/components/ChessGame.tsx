@@ -590,7 +590,7 @@ export function ChessGame() {
               customSquareStyles={getSquareStyles()}
               customDarkSquareStyle={{ backgroundColor: currentTheme.board.darkSquare }}
               customLightSquareStyle={{ backgroundColor: currentTheme.board.lightSquare }}
-              boardWidth={560}
+              boardWidth={700}
               animationDuration={200}
               arePiecesDraggable={!isThinking && gameStatus === 'active'}
               boardOrientation={

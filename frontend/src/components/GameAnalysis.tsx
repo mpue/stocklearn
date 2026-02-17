@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Chess } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
@@ -42,6 +42,17 @@ export function GameAnalysis() {
   const [loading, setLoading] = useState(true);
   const [currentMoveIndex, setCurrentMoveIndex] = useState(-1);
   const [game, setGame] = useState<Chess>(new Chess());
+  const movesScrollRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll move list to active move
+  useEffect(() => {
+    if (movesScrollRef.current && currentMoveIndex >= 0) {
+      const activeEl = movesScrollRef.current.querySelector('.move-analysis-item.active') as HTMLElement;
+      if (activeEl) {
+        activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
+  }, [currentMoveIndex]);
 
   useEffect(() => {
     if (gameId) {
@@ -105,10 +116,37 @@ export function GameAnalysis() {
     goToMove(currentMoveIndex + 1);
   };
 
-  const previousMove = () => {
+  const previousMove = useCallback(() => {
     if (currentMoveIndex <= -1) return;
     goToMove(currentMoveIndex - 1);
-  };
+  }, [currentMoveIndex, analysis]);
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!analysis) return;
+      switch (e.key) {
+        case 'ArrowLeft':
+          e.preventDefault();
+          if (currentMoveIndex > -1) goToMove(currentMoveIndex - 1);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          if (currentMoveIndex < analysis.analysis.length - 1) goToMove(currentMoveIndex + 1);
+          break;
+        case 'Home':
+          e.preventDefault();
+          goToMove(-1);
+          break;
+        case 'End':
+          e.preventDefault();
+          goToMove(analysis.analysis.length - 1);
+          break;
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentMoveIndex, analysis]);
 
   const getEvalDisplay = (evaluation: number, mate?: number) => {
     if (mate !== undefined) {
@@ -180,7 +218,7 @@ export function GameAnalysis() {
           <div className="board-wrapper">
             <Chessboard
               position={game.fen()}
-              boardWidth={560}
+              boardWidth={700}
               arePiecesDraggable={false}
               customDarkSquareStyle={{ backgroundColor: currentTheme.board.darkSquare }}
               customLightSquareStyle={{ backgroundColor: currentTheme.board.lightSquare }}
@@ -277,21 +315,70 @@ export function GameAnalysis() {
             />
           </div>
 
-          <div className="move-controls">
-            <button onClick={() => goToMove(-1)} disabled={currentMoveIndex === -1}>
-              ⏮ Start
-            </button>
-            <button onClick={previousMove} disabled={currentMoveIndex === -1}>
-              ◀ Zurück
-            </button>
-            <button onClick={nextMove} disabled={currentMoveIndex >= analysis.analysis.length - 1}>
-              Vor ▶
-            </button>
-            <button onClick={() => goToMove(analysis.analysis.length - 1)} disabled={currentMoveIndex === analysis.analysis.length - 1}>
-              Ende ⏭
-            </button>
+          <div className="move-nav-bar">
+            <div className="move-nav-buttons">
+              <button onClick={() => goToMove(-1)} disabled={currentMoveIndex === -1} title="Start (Home)">⏮</button>
+              <button onClick={previousMove} disabled={currentMoveIndex === -1} title="Zurück (←)">◀</button>
+              <button onClick={nextMove} disabled={currentMoveIndex >= analysis.analysis.length - 1} title="Vor (→)">▶</button>
+              <button onClick={() => goToMove(analysis.analysis.length - 1)} disabled={currentMoveIndex === analysis.analysis.length - 1} title="Ende (End)">⏭</button>
+            </div>
+            <input
+              type="range"
+              className="move-slider"
+              min={-1}
+              max={analysis.analysis.length - 1}
+              value={currentMoveIndex}
+              onChange={(e) => goToMove(parseInt(e.target.value))}
+            />
+            <span className="move-counter">
+              {currentMoveIndex >= 0 ? currentMoveIndex + 1 : 0} / {analysis.analysis.length}
+            </span>
           </div>
 
+          <div className="eval-chart">
+            <div className="chart-container" onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const x = e.clientX - rect.left;
+              const ratio = x / rect.width;
+              const idx = Math.round(ratio * (analysis.analysis.length - 1));
+              goToMove(Math.max(0, Math.min(idx, analysis.analysis.length - 1)));
+            }}>
+              <div className="chart-side-label white-label">Weiß</div>
+              <div className="chart-side-label black-label">Schwarz</div>
+              <svg viewBox="0 0 400 120" className="eval-svg" preserveAspectRatio="none">
+                {/* White background = white's area */}
+                <rect x="0" y="0" width="400" height="120" fill="white" />
+                {/* Dark polygon from top edge down to eval line = black's area */}
+                {(() => {
+                  const len = Math.max(1, analysis.analysis.length - 1);
+                  const evalPoints = analysis.analysis.map((move, i) => {
+                    const x = (i / len) * 400;
+                    const clamped = Math.max(-5, Math.min(5, move.evaluation));
+                    const y = 60 - (clamped / 5) * 55;
+                    return `${x},${y}`;
+                  });
+                  const d = `M0,0 L${evalPoints.join(' L')} L400,0 Z`;
+                  return <path d={d} fill="#333" />;
+                })()}
+                {/* Center line */}
+                <line x1="0" y1="60" x2="400" y2="60" stroke="rgba(128,128,128,0.4)" strokeWidth="0.5" strokeDasharray="4,4" />
+                {/* Current position indicator */}
+                {currentMoveIndex >= 0 && (
+                  <line
+                    x1={(currentMoveIndex / Math.max(1, analysis.analysis.length - 1)) * 400}
+                    y1="0"
+                    x2={(currentMoveIndex / Math.max(1, analysis.analysis.length - 1)) * 400}
+                    y2="120"
+                    stroke="rgba(255,50,50,0.8)"
+                    strokeWidth="1.5"
+                  />
+                )}
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <div className="analysis-sidebar">
           {currentAnalysis && (
             <div className="current-move-info">
               <div className="move-header">
@@ -325,9 +412,7 @@ export function GameAnalysis() {
               </div>
             </div>
           )}
-        </div>
 
-        <div className="analysis-sidebar">
           <div className="summary-card">
             <h2>Zusammenfassung</h2>
             <div className="summary-grid">
@@ -354,65 +439,9 @@ export function GameAnalysis() {
             </div>
           </div>
 
-          <div className="eval-chart">
-            <h3>Evaluations-Verlauf</h3>
-            <div className="chart-container">
-              <svg viewBox="0 0 400 150" className="eval-svg">
-                <line x1="0" y1="75" x2="400" y2="75" stroke="#ccc" strokeWidth="1" />
-                {analysis.analysis.map((move, index) => {
-                  const x = (index / (analysis.analysis.length - 1)) * 400;
-                  const clampedEvaluation = Math.max(-10, Math.min(10, move.evaluation));
-                  const y = 75 - (clampedEvaluation / 10) * 60;
-                  const nextMove = analysis.analysis[index + 1];
-                  
-                  if (nextMove) {
-                    const nextX = ((index + 1) / (analysis.analysis.length - 1)) * 400;
-                    const nextClampedEvaluation = Math.max(-10, Math.min(10, nextMove.evaluation));
-                    const nextY = 75 - (nextClampedEvaluation / 10) * 60;
-                    
-                    return (
-                      <line
-                        key={index}
-                        x1={x}
-                        y1={y}
-                        x2={nextX}
-                        y2={nextY}
-                        stroke={move.isPlayerMove ? '#667eea' : '#999'}
-                        strokeWidth="2"
-                      />
-                    );
-                  }
-                  return null;
-                })}
-                {analysis.analysis.map((move, index) => {
-                  const x = (index / (analysis.analysis.length - 1)) * 400;
-                  const clampedEvaluation = Math.max(-10, Math.min(10, move.evaluation));
-                  const y = 75 - (clampedEvaluation / 10) * 60;
-                  
-                  return (
-                    <circle
-                      key={index}
-                      cx={x}
-                      cy={y}
-                      r={index === currentMoveIndex ? 6 : 3}
-                      fill={getClassificationColor(move.classification)}
-                      onClick={() => goToMove(index)}
-                      style={{ cursor: 'pointer' }}
-                    />
-                  );
-                })}
-              </svg>
-              <div className="chart-labels">
-                <span>+10</span>
-                <span>0</span>
-                <span>-10</span>
-              </div>
-            </div>
-          </div>
-
           <div className="moves-list-analysis">
             <h3>Züge</h3>
-            <div className="moves-scroll">
+            <div className="moves-scroll" ref={movesScrollRef}>
               {analysis.analysis.map((move, index) => (
                 <div
                   key={index}

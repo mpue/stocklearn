@@ -18,7 +18,7 @@
 }
 
 .sidebar-left {
-  flex: 0 0 350px;
+  flex: 0 0 250px;
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -26,7 +26,7 @@
 
 .board-container {
   flex: 0 0 auto;
-  width: 560px;
+  width: 700px;
   display: flex;
   flex-direction: column;
 }
@@ -69,8 +69,8 @@
 }
 
 .chessboard-wrapper {
-  width: 560px;
-  height: 560px;
+  width: 700px;
+  height: 700px;
   position: relative;
 }
 
@@ -144,35 +144,37 @@
 }
 
 .sidebar {
-  flex: 1;
+  flex: 0 0 250px;
   display: flex;
   flex-direction: column;
   gap: 20px;
-  min-width: 300px;
+  min-width: 0;
 }
 
 .info-panel,
 .moves-panel {
   background: white;
   border-radius: 8px;
-  padding: 20px;
+  padding: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  font-size: 0.9rem;
 }
 
 .info-panel h3,
 .moves-panel h3 {
   margin-top: 0;
-  margin-bottom: 15px;
+  margin-bottom: 10px;
   color: #333;
-  font-size: 1.3rem;
+  font-size: 1rem;
   border-bottom: 2px solid var(--color-accent, #667eea);
-  padding-bottom: 10px;
+  padding-bottom: 8px;
 }
 
 .info-item {
-  padding: 10px 0;
+  padding: 6px 0;
   border-bottom: 1px solid #eee;
   color: #666;
+  font-size: 0.85rem;
 }
 
 .info-item:last-child {
@@ -188,14 +190,14 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 400px;
+  min-height: 300px;
   max-height: 500px;
 }
 
 .move-list {
   flex: 1;
   overflow-y: auto;
-  min-height: 320px;
+  min-height: 250px;
   max-height: 400px;
 }
 
@@ -214,11 +216,12 @@
 
 .move-pair {
   display: grid;
-  grid-template-columns: 40px 1fr 1fr;
-  gap: 10px;
-  padding: 8px;
+  grid-template-columns: 30px 1fr 1fr;
+  gap: 4px;
+  padding: 4px 6px;
   border-radius: 4px;
   background: #f8f9fa;
+  font-size: 0.8rem;
 }
 
 .move-pair:hover {
@@ -313,7 +316,7 @@
   .sidebar-left,
   .sidebar {
     width: 100%;
-    max-width: 560px;
+    max-width: 700px;
   }
   
   .sidebar-left .chat-panel {
