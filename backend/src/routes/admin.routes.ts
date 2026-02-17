@@ -598,13 +598,19 @@ router.post('/users/:id/invite', async (req: AuthRequest, res) => {
 
     // Try to send email
     try {
+      const smtpPort = parseInt(settingsMap['smtp_port'] || '587');
+      const smtpSecure = settingsMap['smtp_secure'] === 'true';
       const transporter = nodemailer.createTransport({
         host: settingsMap['smtp_host'],
-        port: parseInt(settingsMap['smtp_port'] || '587'),
-        secure: settingsMap['smtp_secure'] === 'true',
+        port: smtpPort,
+        secure: smtpSecure, // true for 465, false for 587/25 (STARTTLS)
+        requireTLS: !smtpSecure && smtpPort !== 25, // require STARTTLS on port 587
         auth: {
           user: settingsMap['smtp_user'],
           pass: settingsMap['smtp_password'],
+        },
+        tls: {
+          rejectUnauthorized: false, // allow self-signed certificates
         },
       });
 
@@ -715,13 +721,19 @@ router.post('/settings/test-email', async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'SMTP-Server ist nicht konfiguriert.' });
     }
 
+    const smtpPort = parseInt(settingsMap['smtp_port'] || '587');
+    const smtpSecure = settingsMap['smtp_secure'] === 'true';
     const transporter = nodemailer.createTransport({
       host: settingsMap['smtp_host'],
-      port: parseInt(settingsMap['smtp_port'] || '587'),
-      secure: settingsMap['smtp_secure'] === 'true',
+      port: smtpPort,
+      secure: smtpSecure, // true for 465, false for 587/25 (STARTTLS)
+      requireTLS: !smtpSecure && smtpPort !== 25, // require STARTTLS on port 587
       auth: {
         user: settingsMap['smtp_user'],
         pass: settingsMap['smtp_password'],
+      },
+      tls: {
+        rejectUnauthorized: false, // allow self-signed certificates
       },
     });
 
