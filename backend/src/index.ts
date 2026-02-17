@@ -8,6 +8,7 @@ import { Chess } from 'chess.js';
 import bcrypt from 'bcryptjs';
 import { stockfishEngine } from './services/stockfish.service.js';
 import { authenticateToken, generateToken, AuthRequest } from './middleware/auth.middleware.js';
+import adminRoutes from './routes/admin.routes.js';
 
 dotenv.config();
 
@@ -35,6 +36,9 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
+
+// Admin Routes
+app.use('/api/admin', adminRoutes);
 
 // Health Check
 app.get('/health', (req, res) => {
@@ -84,7 +88,8 @@ app.post('/api/auth/register', async (req, res) => {
       user: {
         id: user.id,
         email: user.email,
-        username: user.username
+        username: user.username,
+        isAdmin: user.isAdmin
       }
     });
   } catch (error) {
@@ -118,6 +123,11 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    // Check if user is active
+    if (!user.isActive) {
+      return res.status(403).json({ error: 'Account is deactivated. Contact an administrator.' });
+    }
+
     // Generate token
     const token = generateToken(user.id);
 
@@ -126,7 +136,8 @@ app.post('/api/auth/login', async (req, res) => {
       user: {
         id: user.id,
         email: user.email,
-        username: user.username
+        username: user.username,
+        isAdmin: user.isAdmin
       }
     });
   } catch (error) {
@@ -149,7 +160,8 @@ app.get('/api/auth/me', authenticateToken, async (req: AuthRequest, res) => {
     res.json({
       id: user.id,
       email: user.email,
-      username: user.username
+      username: user.username,
+      isAdmin: user.isAdmin
     });
   } catch (error) {
     console.error('Error fetching user:', error);

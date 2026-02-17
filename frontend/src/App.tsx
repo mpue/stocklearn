@@ -8,6 +8,7 @@ import { Register } from './components/Register'
 import { Dashboard } from './components/Dashboard'
 import { ChessGame } from './components/ChessGame'
 import { GameAnalysis } from './components/GameAnalysis'
+import { AdminDashboard } from './components/AdminDashboard'
 import './App.css'
 
 function App() {
@@ -47,6 +48,10 @@ function App() {
                   <GameAnalysis />
                 </ProtectedRoute>
               } 
+            />
+            <Route 
+              path="/admin" 
+              element={<AdminDashboard />}
             />
           </Routes>
         </BrowserRouter>

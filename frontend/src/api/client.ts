@@ -12,6 +12,7 @@ export interface User {
   id: string;
   email: string;
   username: string;
+  isAdmin?: boolean;
 }
 
 export interface AuthResponse {
@@ -218,5 +219,148 @@ export const api = {
     if (!response.ok) {
       throw new Error('Failed to delete game');
     }
+  },
+
+  // ==================== ADMIN API ====================
+
+  // Setup endpoints (no auth required)
+  async adminCheckSetup(): Promise<{ needsSetup: boolean }> {
+    const response = await fetch(`${API_URL}/api/admin/setup/status`);
+    if (!response.ok) {
+      throw new Error('Failed to check setup status');
+    }
+    return response.json();
+  },
+
+  async adminCreateInitialAdmin(data: { email: string; username: string; password: string }): Promise<any> {
+    const response = await fetch(`${API_URL}/api/admin/setup/create-admin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to create admin user');
+    }
+    return response.json();
+  },
+
+  async adminGetUsers(params: { page?: number; limit?: number; search?: string; sortBy?: string; sortOrder?: string } = {}): Promise<any> {
+    const query = new URLSearchParams();
+    if (params.page) query.set('page', params.page.toString());
+    if (params.limit) query.set('limit', params.limit.toString());
+    if (params.search) query.set('search', params.search);
+    if (params.sortBy) query.set('sortBy', params.sortBy);
+    if (params.sortOrder) query.set('sortOrder', params.sortOrder);
+
+    const response = await fetch(`${API_URL}/api/admin/users?${query}`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to fetch users');
+    }
+    return response.json();
+  },
+
+  async adminUpdateUser(userId: string, data: { email?: string; username?: string; password?: string; isAdmin?: boolean; isActive?: boolean }): Promise<any> {
+    const response = await fetch(`${API_URL}/api/admin/users/${userId}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to update user');
+    }
+    return response.json();
+  },
+
+  async adminToggleUserActive(userId: string): Promise<any> {
+    const response = await fetch(`${API_URL}/api/admin/users/${userId}/toggle-active`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to toggle user status');
+    }
+    return response.json();
+  },
+
+  async adminDeleteUser(userId: string): Promise<void> {
+    const response = await fetch(`${API_URL}/api/admin/users/${userId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to delete user');
+    }
+  },
+
+  async adminGetGames(params: { page?: number; limit?: number; search?: string; status?: string; gameType?: string; sortBy?: string; sortOrder?: string } = {}): Promise<any> {
+    const query = new URLSearchParams();
+    if (params.page) query.set('page', params.page.toString());
+    if (params.limit) query.set('limit', params.limit.toString());
+    if (params.search) query.set('search', params.search);
+    if (params.status) query.set('status', params.status);
+    if (params.gameType) query.set('gameType', params.gameType);
+    if (params.sortBy) query.set('sortBy', params.sortBy);
+    if (params.sortOrder) query.set('sortOrder', params.sortOrder);
+
+    const response = await fetch(`${API_URL}/api/admin/games?${query}`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to fetch games');
+    }
+    return response.json();
+  },
+
+  async adminDeleteGame(gameId: string): Promise<void> {
+    const response = await fetch(`${API_URL}/api/admin/games/${gameId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to delete game');
+    }
+  },
+
+  async adminGetStats(): Promise<any> {
+    const response = await fetch(`${API_URL}/api/admin/stats`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to fetch stats');
+    }
+    return response.json();
+  },
+
+  async adminCreateBackup(): Promise<any> {
+    const response = await fetch(`${API_URL}/api/admin/backup`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to create backup');
+    }
+    return response.json();
+  },
+
+  async adminRestore(backupData: any): Promise<any> {
+    const response = await fetch(`${API_URL}/api/admin/restore`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(backupData),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to restore backup');
+    }
+    return response.json();
   },
 };

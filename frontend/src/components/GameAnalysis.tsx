@@ -203,6 +203,49 @@ export function GameAnalysis() {
 
   const currentAnalysis = currentMoveIndex >= 0 ? analysis.analysis[currentMoveIndex] : null;
 
+  // Compute arrows and square highlights for move visualization
+  const getCustomArrows = (): [string, string, string][] => {
+    if (!currentAnalysis) return [];
+    const arrows: [string, string, string][] = [];
+    const bestFrom = currentAnalysis.bestMove?.substring(0, 2);
+    const bestTo = currentAnalysis.bestMove?.substring(2, 4);
+    const playedFrom = currentAnalysis.from;
+    const playedTo = currentAnalysis.to;
+    const isBestMove = bestFrom === playedFrom && bestTo === playedTo;
+
+    if (isBestMove) {
+      // Played move was the best — green arrow
+      arrows.push([playedFrom, playedTo, 'rgba(0, 180, 0, 0.7)']);
+    } else {
+      // Played move — color based on classification
+      const moveColor = getClassificationColor(currentAnalysis.classification);
+      arrows.push([playedFrom, playedTo, moveColor]);
+      // Best move — green arrow
+      if (bestFrom && bestTo) {
+        arrows.push([bestFrom, bestTo, 'rgba(0, 180, 0, 0.6)']);
+      }
+    }
+    return arrows;
+  };
+
+  const getMoveSquareStyles = (): Record<string, React.CSSProperties> => {
+    if (!currentAnalysis) return {};
+    const styles: Record<string, React.CSSProperties> = {};
+    const bestFrom = currentAnalysis.bestMove?.substring(0, 2);
+    const bestTo = currentAnalysis.bestMove?.substring(2, 4);
+    const isBestMove = bestFrom === currentAnalysis.from && bestTo === currentAnalysis.to;
+
+    // Highlight played move squares
+    styles[currentAnalysis.from] = {
+      backgroundColor: isBestMove ? 'rgba(0, 180, 0, 0.3)' : 'rgba(255, 170, 0, 0.4)',
+    };
+    styles[currentAnalysis.to] = {
+      backgroundColor: isBestMove ? 'rgba(0, 180, 0, 0.3)' : 'rgba(255, 170, 0, 0.4)',
+    };
+
+    return styles;
+  };
+
   return (
     <div className="game-analysis">
       <div className="analysis-header">
@@ -220,6 +263,9 @@ export function GameAnalysis() {
               position={game.fen()}
               boardWidth={700}
               arePiecesDraggable={false}
+              customArrowColor="rgba(0, 180, 0, 0.6)"
+              customArrows={getCustomArrows()}
+              customSquareStyles={getMoveSquareStyles()}
               customDarkSquareStyle={{ backgroundColor: currentTheme.board.darkSquare }}
               customLightSquareStyle={{ backgroundColor: currentTheme.board.lightSquare }}
               customBoardStyle={{
@@ -379,15 +425,19 @@ export function GameAnalysis() {
         </div>
 
         <div className="analysis-sidebar">
-          {currentAnalysis && (
-            <div className="current-move-info">
+          {currentAnalysis && (() => {
+            const bestFrom = currentAnalysis.bestMove?.substring(0, 2);
+            const bestTo = currentAnalysis.bestMove?.substring(2, 4);
+            const isBestMove = bestFrom === currentAnalysis.from && bestTo === currentAnalysis.to;
+            return (
+            <div className={`current-move-info ${isBestMove ? 'best-move-played' : ''}`}>
               <div className="move-header">
                 <h3>Zug {Math.floor(currentAnalysis.moveNumber / 2) + 1}: {currentAnalysis.move}</h3>
                 <span
                   className="classification-badge"
-                  style={{ backgroundColor: getClassificationColor(currentAnalysis.classification) }}
+                  style={{ backgroundColor: isBestMove ? '#28a745' : getClassificationColor(currentAnalysis.classification) }}
                 >
-                  {currentAnalysis.classification.toUpperCase()} {getClassificationLabel(currentAnalysis.classification)}
+                  {isBestMove ? '✓ BESTER ZUG' : `${currentAnalysis.classification.toUpperCase()} ${getClassificationLabel(currentAnalysis.classification)}`}
                 </span>
               </div>
               <div className="eval-info">
@@ -405,13 +455,16 @@ export function GameAnalysis() {
                     </span>
                   </div>
                 )}
-                <div className="eval-item">
-                  <strong>Bester Zug:</strong>
-                  <span>{currentAnalysis.bestMove} ({getEvalDisplay(currentAnalysis.bestMoveEval)})</span>
-                </div>
+                {!isBestMove && (
+                  <div className="eval-item">
+                    <strong>Bester Zug:</strong>
+                    <span className="best-move-text">{currentAnalysis.bestMove} ({getEvalDisplay(currentAnalysis.bestMoveEval)})</span>
+                  </div>
+                )}
               </div>
             </div>
-          )}
+            );
+          })()}
 
           <div className="summary-card">
             <h2>Zusammenfassung</h2>

@@ -12,6 +12,8 @@ model User {
   email         String   @unique
   username      String   @unique
   password      String
+  isAdmin       Boolean  @default(false)
+  isActive      Boolean  @default(true)
   gamesAsWhite  Game[]   @relation("WhitePlayer")
   gamesAsBlack  Game[]   @relation("BlackPlayer")
   createdAt     DateTime @default(now())
