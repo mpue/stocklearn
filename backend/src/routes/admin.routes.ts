@@ -603,15 +603,17 @@ router.post('/users/:id/invite', async (req: AuthRequest, res) => {
       const transporter = nodemailer.createTransport({
         host: settingsMap['smtp_host'],
         port: smtpPort,
-        secure: smtpSecure, // true for 465, false for 587/25 (STARTTLS)
-        requireTLS: !smtpSecure && smtpPort !== 25, // require STARTTLS on port 587
+        secure: smtpSecure,
         auth: {
           user: settingsMap['smtp_user'],
           pass: settingsMap['smtp_password'],
         },
         tls: {
-          rejectUnauthorized: false, // allow self-signed certificates
+          rejectUnauthorized: false,
         },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 15000,
       });
 
       const subject = settingsMap['invite_email_subject'] || 'Willkommen bei Stocklearn!';
@@ -727,15 +729,20 @@ router.post('/settings/test-email', async (req: AuthRequest, res) => {
       host: settingsMap['smtp_host'],
       port: smtpPort,
       secure: smtpSecure, // true for 465, false for 587/25 (STARTTLS)
-      requireTLS: !smtpSecure && smtpPort !== 25, // require STARTTLS on port 587
       auth: {
         user: settingsMap['smtp_user'],
         pass: settingsMap['smtp_password'],
       },
       tls: {
-        rejectUnauthorized: false, // allow self-signed certificates
+        rejectUnauthorized: false,
       },
+      connectionTimeout: 10000, // 10s timeout
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
     });
+
+    // Verify connection first
+    await transporter.verify();
 
     await transporter.sendMail({
       from: `"${settingsMap['smtp_from_name'] || 'Stocklearn'}" <${settingsMap['smtp_from_email'] || settingsMap['smtp_user']}>`,

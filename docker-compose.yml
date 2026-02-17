@@ -32,13 +32,13 @@ services:
       - "3004:3004"
     volumes:
       - ./backend:/app
-      - /app/node_modules
+      - backend-node-modules:/app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
     networks:
       - stocklearn-network
-    command: sh -c "sleep 5 && pnpm prisma migrate deploy && pnpm dev"
+    command: sh -c "CI=true pnpm install && pnpm prisma generate && sleep 5 && pnpm prisma migrate deploy && pnpm dev"
 
   frontend:
     build:
@@ -61,6 +61,7 @@ services:
 
 volumes:
   postgres-data:
+  backend-node-modules:
 
 networks:
   stocklearn-network:
