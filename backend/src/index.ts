@@ -6,8 +6,10 @@ import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
 import { Chess } from 'chess.js';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { stockfishEngine } from './services/stockfish.service.js';
 import { authenticateToken, generateToken, AuthRequest } from './middleware/auth.middleware.js';
+import { sendMagicLink } from './services/email.service.js';
 import adminRoutes from './routes/admin.routes.js';
 
 dotenv.config();
@@ -116,6 +118,11 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    // Check if user has a password set
+    if (!user.password) {
+      return res.status(400).json({ error: 'This account uses Magic Link login. Please use the Magic Link option.' });
+    }
+
     // Verify password
     const validPassword = await bcrypt.compare(password, user.password);
 
@@ -166,6 +173,118 @@ app.get('/api/auth/me', authenticateToken, async (req: AuthRequest, res) => {
   } catch (error) {
     console.error('Error fetching user:', error);
     res.status(500).json({ error: 'Failed to fetch user' });
+  }
+});
+
+// Magic Link - Request
+app.post('/api/auth/request-magic-link', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    // Find user by email
+    let user = await prisma.user.findUnique({
+      where: { email }
+    });
+
+    // If user doesn't exist, create a new one with a temporary username
+    if (!user) {
+      const username = email.split('@')[0] + '_' + crypto.randomBytes(4).toString('hex');
+      user = await prisma.user.create({
+        data: {
+          email,
+          username,
+          // password is optional for magic link users
+        }
+      });
+    }
+
+    // Check if user is active
+    if (!user.isActive) {
+      return res.status(403).json({ error: 'Account is deactivated. Contact an administrator.' });
+    }
+
+    // Generate magic link token
+    const magicLinkToken = crypto.randomBytes(32).toString('hex');
+    const magicLinkExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+    // Update user with magic link token
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        magicLinkToken,
+        magicLinkExpiry
+      }
+    });
+
+    // Send magic link email
+    await sendMagicLink(email, magicLinkToken, user.username);
+
+    res.json({ 
+      message: 'Magic link sent to your email',
+      email: email
+    });
+  } catch (error) {
+    console.error('Error sending magic link:', error);
+    res.status(500).json({ error: 'Failed to send magic link' });
+  }
+});
+
+// Magic Link - Verify
+app.post('/api/auth/verify-magic-link', async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(400).json({ error: 'Token is required' });
+    }
+
+    // Find user by magic link token
+    const user = await prisma.user.findUnique({
+      where: { magicLinkToken: token }
+    });
+
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid or expired magic link' });
+    }
+
+    // Check if token is expired
+    if (!user.magicLinkExpiry || user.magicLinkExpiry < new Date()) {
+      return res.status(401).json({ error: 'Magic link has expired' });
+    }
+
+    // Check if user is active
+    if (!user.isActive) {
+      return res.status(403).json({ error: 'Account is deactivated. Contact an administrator.' });
+    }
+
+    // Clear magic link token (one-time use)
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        magicLinkToken: null,
+        magicLinkExpiry: null
+      }
+    });
+
+    // Generate JWT token
+    const authToken = generateToken(user.id);
+
+    res.json({
+      token: authToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        isAdmin: user.isAdmin
+      }
+    });
+  } catch (error) {
+    console.error('Error verifying magic link:', error);
+    res.status(500).json({ error: 'Failed to verify magic link' });
   }
 });
 

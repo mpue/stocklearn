@@ -87,6 +87,38 @@ export const api = {
     return data;
   },
 
+  async requestMagicLink(email: string): Promise<{ message: string; email: string }> {
+    const response = await fetch(`${API_URL}/api/auth/request-magic-link`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to request magic link');
+    }
+    
+    return response.json();
+  },
+
+  async verifyMagicLink(token: string): Promise<AuthResponse> {
+    const response = await fetch(`${API_URL}/api/auth/verify-magic-link`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to verify magic link');
+    }
+    
+    const data = await response.json();
+    localStorage.setItem('authToken', data.token);
+    return data;
+  },
+
   async getCurrentUser(): Promise<User> {
     const response = await fetch(`${API_URL}/api/auth/me`, {
       headers: getAuthHeaders(),

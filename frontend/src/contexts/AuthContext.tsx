@@ -6,6 +6,8 @@ interface AuthContextType {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, username: string, password: string) => Promise<void>;
+  requestMagicLink: (email: string) => Promise<{ message: string; email: string }>;
+  verifyMagicLink: (token: string) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
 }
@@ -57,6 +59,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setUser(response.user);
   };
 
+  const requestMagicLink = async (email: string) => {
+    return await api.requestMagicLink(email);
+  };
+
+  const verifyMagicLink = async (token: string) => {
+    const response = await api.verifyMagicLink(token);
+    setUser(response.user);
+  };
+
   const logout = () => {
     api.logout();
     setUser(null);
@@ -67,6 +78,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     loading,
     login,
     register,
+    requestMagicLink,
+    verifyMagicLink,
     logout,
     isAuthenticated: !!user,
   };

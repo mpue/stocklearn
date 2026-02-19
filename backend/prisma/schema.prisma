@@ -11,11 +11,13 @@ model User {
   id                 String    @id @default(uuid())
   email              String    @unique
   username           String    @unique
-  password           String
+  password           String?   // Optional - für Migration von bestehenden Nutzern
   isAdmin            Boolean   @default(false)
   isActive           Boolean   @default(true)
   inviteToken        String?   @unique
   inviteTokenExpiry  DateTime?
+  magicLinkToken     String?   @unique
+  magicLinkExpiry    DateTime?
   gamesAsWhite       Game[]    @relation("WhitePlayer")
   gamesAsBlack       Game[]    @relation("BlackPlayer")
   createdAt          DateTime  @default(now())

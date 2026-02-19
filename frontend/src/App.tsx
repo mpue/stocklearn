@@ -5,6 +5,7 @@ import { SocketProvider } from './contexts/SocketContext'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { Login } from './components/Login'
 import { Register } from './components/Register'
+import { MagicLinkVerify } from './components/MagicLinkVerify'
 import { Dashboard } from './components/Dashboard'
 import { ChessGame } from './components/ChessGame'
 import { GameAnalysis } from './components/GameAnalysis'
@@ -26,6 +27,7 @@ function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/auth/verify" element={<MagicLinkVerify />} />
             <Route 
               path="/" 
               element={
