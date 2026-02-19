@@ -27,9 +27,13 @@ export function ChessGame() {
   const [moveHistory, setMoveHistory] = useState<string[]>([]);
   const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
   const [lastMove, setLastMove] = useState<{ from: Square; to: Square } | null>(null);
-  const [skillLevel] = useState(() => {
-    return parseInt(localStorage.getItem('stockfishSkillLevel') || '10');
+  const [elo] = useState(() => {
+    return parseInt(localStorage.getItem('stockfishElo') || '1500');
   });
+  const [assistedMode] = useState(() => {
+    return localStorage.getItem('assistedMode') === 'true';
+  });
+  const [assistedMoves, setAssistedMoves] = useState<Array<{ from: string; to: string; rank: number }>>([]);
 
   // Berechne geschlagene Figuren und Materialvorteil
   const getCapturedPieces = () => {
@@ -340,6 +344,23 @@ export function ChessGame() {
           borderRadius: '50%'
         };
       });
+
+      // Assisted Mode: Top-Züge farbig hervorheben
+      if (assistedMode && assistedMoves.length > 0) {
+        const movesForSquare = assistedMoves.filter(m => m.from === selectedSquare);
+        const assistedColors = [
+          'rgba(0, 200, 0, 0.6)',    // Grün - bester Zug
+          'rgba(255, 165, 0, 0.6)',   // Orange - zweitbester
+          'rgba(255, 255, 0, 0.6)',   // Gelb - drittbester
+        ];
+        movesForSquare.forEach(move => {
+          const colorIndex = Math.min(move.rank - 1, assistedColors.length - 1);
+          styles[move.to] = {
+            backgroundColor: assistedColors[colorIndex],
+            boxShadow: `inset 0 0 0 3px ${assistedColors[colorIndex]}`,
+          };
+        });
+      }
     }
     
     // König im Schach rot umranden
@@ -376,6 +397,11 @@ export function ChessGame() {
         }
         
         setSelectedSquare(square);
+
+        // Assisted Mode: Top-Züge laden wenn gegen Stockfish
+        if (assistedMode && gameData?.gameType === 'vs_stockfish') {
+          fetchAssistedMoves();
+        }
       }
       return;
     }
@@ -383,6 +409,7 @@ export function ChessGame() {
     // Wenn gleiche Figur nochmal geklickt, Auswahl aufheben
     if (selectedSquare === square) {
       setSelectedSquare(null);
+      setAssistedMoves([]);
       return;
     }
 
@@ -390,6 +417,11 @@ export function ChessGame() {
     const piece = game.get(square);
     if (piece && piece.color === game.turn()) {
       setSelectedSquare(square);
+
+      // Assisted Mode: Top-Züge laden wenn gegen Stockfish
+      if (assistedMode && gameData?.gameType === 'vs_stockfish') {
+        fetchAssistedMoves();
+      }
       return;
     }
 
@@ -400,6 +432,23 @@ export function ChessGame() {
     }
     
     setSelectedSquare(null);
+    setAssistedMoves([]);
+  };
+
+  // Assisted Mode: Top-Züge von Stockfish holen
+  const fetchAssistedMoves = async () => {
+    try {
+      const result = await api.getSuggestedMoves(game.fen(), elo, 3);
+      const moves = result.moves.map((m, index) => ({
+        from: m.move.substring(0, 2),
+        to: m.move.substring(2, 4),
+        rank: index + 1,
+      }));
+      setAssistedMoves(moves);
+    } catch (error) {
+      console.error('Error fetching assisted moves:', error);
+      setAssistedMoves([]);
+    }
   };
 
   const onDrop = async (sourceSquare: string, targetSquare: string) => {
@@ -452,6 +501,7 @@ export function ChessGame() {
       setGame(gameCopy);
       setIsThinking(true);
       setSelectedSquare(null);
+      setAssistedMoves([]);
       setLastMove({ from: sourceSquare as Square, to: targetSquare as Square });
       
       if (gameData.gameType === 'vs_player') {
@@ -775,6 +825,11 @@ export function ChessGame() {
                 <div className="info-item">
                   <strong>Gegner:</strong> Stockfish Engine
                 </div>
+                {assistedMode && (
+                  <div className="info-item assisted-mode-badge">
+                    <strong>🎯 Assisted Mode</strong> aktiv
+                  </div>
+                )}
               </>
             )}
           </div>

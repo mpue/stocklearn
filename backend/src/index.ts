@@ -311,6 +311,27 @@ app.get('/api/games/:id', authenticateToken, async (req: AuthRequest, res) => {
   }
 });
 
+// Top-Züge für Assisted Mode
+app.post('/api/games/suggest-moves', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { fen, elo = 1500, count = 3 } = req.body;
+    
+    if (!fen) {
+      return res.status(400).json({ error: 'FEN is required' });
+    }
+    
+    const topMoves = await stockfishEngine.getTopMoves(fen, elo, count);
+    
+    // Reset MultiPV back to 1 after getting suggestions
+    // (this happens implicitly in getBestMove which sets its own options)
+    
+    res.json({ moves: topMoves });
+  } catch (error) {
+    console.error('Error getting suggested moves:', error);
+    res.status(500).json({ error: 'Failed to get suggested moves' });
+  }
+});
+
 // Zug ausführen
 app.post('/api/games/:id/move', authenticateToken, async (req: AuthRequest, res) => {
   try {
@@ -394,8 +415,8 @@ app.post('/api/games/:id/move', authenticateToken, async (req: AuthRequest, res)
     let stockfishMove = null;
     if (game.gameType === 'vs_stockfish' && status === 'active') {
       try {
-        const skillLevel = req.body.skillLevel || 10;
-        const bestMove = await stockfishEngine.getBestMove(chess.fen(), skillLevel);
+        const elo = req.body.elo || req.body.skillLevel || 1500;
+        const bestMove = await stockfishEngine.getBestMove(chess.fen(), elo);
         
         // Stockfish-Zug ausführen
         const sfMoveResult = chess.move({

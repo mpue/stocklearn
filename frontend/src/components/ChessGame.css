@@ -186,6 +186,16 @@
   margin-right: 8px;
 }
 
+.info-item.assisted-mode-badge {
+  background: rgba(76, 175, 80, 0.1);
+  border: 1px solid rgba(76, 175, 80, 0.3);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-top: 4px;
+  color: #4caf50;
+  font-size: 0.85rem;
+}
+
 .moves-panel {
   flex: 1;
   display: flex;

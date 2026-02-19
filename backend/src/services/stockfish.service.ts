@@ -1,4 +1,5 @@
 import { spawn, ChildProcess } from 'child_process';
+import { Chess } from 'chess.js';
 
 export class StockfishEngine {
   private stockfish: ChildProcess | null = null;
@@ -87,7 +88,117 @@ export class StockfishEngine {
     this.processQueue();
   }
 
-  async getBestMove(fen: string, skillLevel: number = 10): Promise<string> {
+  /**
+   * Map Elo rating (500-3200) to Stockfish engine parameters.
+   * 
+   * - Elo >= 1350: Use UCI_LimitStrength + UCI_Elo (Stockfish's official mechanism)
+   * - Elo < 1350:  Stockfish UCI_Elo can't go below ~1320, so we use a
+   *                "blunder" approach: get the top moves, then randomly pick
+   *                a weaker one based on how low the Elo is.
+   */
+  private getEngineConfig(elo: number) {
+    const clampedElo = Math.max(500, Math.min(3200, elo));
+    
+    if (clampedElo >= 1350) {
+      return {
+        useRandomWeakening: false,
+        sfSkillLevel: 20,
+        uciLimitStrength: true,
+        uciElo: clampedElo,
+        depth: 0,
+        moveTime: 2000,
+        randomMoveProbability: 0,
+      };
+    }
+    
+    // Below 1350: use random weakening
+    // 500 Elo -> 70% chance of random move, 1350 -> 5% chance
+    const randomMoveProbability = 0.70 - (clampedElo - 500) * 0.65 / 850;
+    
+    return {
+      useRandomWeakening: true,
+      sfSkillLevel: 0,
+      uciLimitStrength: false,
+      uciElo: 1320,
+      depth: 4,               // Shallow search for candidate ranking
+      moveTime: 200,
+      randomMoveProbability,
+    };
+  }
+
+  /**
+   * For low Elo: pick a move with weighted randomness.
+   * Uses chess.js to get all legal moves, gets Stockfish evaluations for 
+   * top moves, then sometimes picks a bad move based on the Elo setting.
+   */
+  async getBestMove(fen: string, elo: number = 1500): Promise<string> {
+    const config = this.getEngineConfig(elo);
+    
+    if (config.useRandomWeakening) {
+      return this.getWeakenedMove(fen, elo);
+    }
+    
+    return this.getEngineBestMove(fen, config);
+  }
+
+  /**
+   * Weakened move selection for Elo < 1350.
+   * Mixes random legal moves with engine moves based on probability.
+   * Adds a random delay (0.5-2s) to feel more natural.
+   */
+  private async getWeakenedMove(fen: string, elo: number): Promise<string> {
+    const config = this.getEngineConfig(elo);
+    const chess = new Chess(fen);
+    const legalMoves = chess.moves({ verbose: true });
+    
+    if (legalMoves.length === 0) {
+      throw new Error('No legal moves available');
+    }
+    
+    // Random "thinking" delay: 500-2000ms
+    const delay = 500 + Math.random() * 1500;
+    await new Promise(res => setTimeout(res, delay));
+    
+    // If only 1 legal move, just play it
+    if (legalMoves.length === 1) {
+      const m = legalMoves[0];
+      return m.from + m.to + (m.promotion || '');
+    }
+
+    const roll = Math.random();
+    
+    if (roll < config.randomMoveProbability) {
+      // Play a random move — but slightly prefer captures/checks for realism
+      // Shuffle and pick, with some weighting
+      const weighted = legalMoves.map(m => {
+        let weight = 1;
+        // Slight preference for captures (beginners see obvious captures)
+        if (m.captured) weight += 0.5;
+        return { move: m, weight };
+      });
+      
+      const totalWeight = weighted.reduce((sum, w) => sum + w.weight, 0);
+      let r = Math.random() * totalWeight;
+      for (const w of weighted) {
+        r -= w.weight;
+        if (r <= 0) {
+          return w.move.from + w.move.to + (w.move.promotion || '');
+        }
+      }
+      
+      // Fallback: truly random
+      const randomMove = legalMoves[Math.floor(Math.random() * legalMoves.length)];
+      return randomMove.from + randomMove.to + (randomMove.promotion || '');
+    }
+    
+    // Otherwise, use Stockfish (still weakened with Skill Level 0 + shallow depth)
+    return this.getEngineBestMove(fen, config);
+  }
+
+  /**
+   * Get move directly from Stockfish engine with given config.
+   */
+  private getEngineBestMove(fen: string, config: ReturnType<StockfishEngine['getEngineConfig']>): Promise<string> {
     return new Promise((resolve, reject) => {
       const command = () => {
         if (!this.stockfish || !this.stockfish.stdout || !this.stockfish.stdin) {
@@ -121,9 +232,16 @@ export class StockfishEngine {
 
         this.stockfish.stdout.on('data', dataHandler);
         
-        this.stockfish.stdin.write(`setoption name Skill Level value ${skillLevel}\n`);
+        this.stockfish.stdin.write(`setoption name Skill Level value ${config.sfSkillLevel}\n`);
+        this.stockfish.stdin.write(`setoption name UCI_LimitStrength value ${config.uciLimitStrength}\n`);
+        this.stockfish.stdin.write(`setoption name UCI_Elo value ${config.uciElo}\n`);
+        this.stockfish.stdin.write(`setoption name MultiPV value 1\n`);
         this.stockfish.stdin.write(`position fen ${fen}\n`);
-        this.stockfish.stdin.write('go movetime 1000\n');
+        if (config.depth > 0) {
+          this.stockfish.stdin.write(`go depth ${config.depth} movetime ${config.moveTime}\n`);
+        } else {
+          this.stockfish.stdin.write(`go movetime ${config.moveTime}\n`);
+        }
       };
 
       this.queue.push({ resolve, reject, command });
@@ -191,6 +309,87 @@ export class StockfishEngine {
         
         this.stockfish.stdin.write(`position fen ${fen}\n`);
         this.stockfish.stdin.write(`go depth ${depth}\n`);
+      };
+
+      this.queue.push({ resolve, reject, command });
+      this.processQueue();
+    });
+  }
+
+  async getTopMoves(fen: string, elo: number = 1500, count: number = 3): Promise<Array<{ move: string; evaluation: number; mate?: number }>> {
+    return new Promise((resolve, reject) => {
+      const command = () => {
+        if (!this.stockfish || !this.stockfish.stdout || !this.stockfish.stdin) {
+          this.finishProcessing();
+          return reject(new Error('Stockfish not available'));
+        }
+
+        const results: Array<{ move: string; evaluation: number; mate?: number; rank: number }> = [];
+        
+        const timeout = setTimeout(() => {
+          this.stockfish?.stdout?.removeListener('data', dataHandler);
+          this.finishProcessing();
+          // Return whatever we have so far
+          resolve(results.sort((a, b) => a.rank - b.rank).map(({ rank, ...rest }) => rest));
+        }, 10000);
+
+        const dataHandler = (data: Buffer) => {
+          const output = data.toString();
+          const lines = output.split('\n');
+          
+          for (const line of lines) {
+            // Parse info lines with multipv
+            if (line.includes('info') && line.includes('multipv') && (line.includes('score cp') || line.includes('score mate'))) {
+              const pvMatch = line.match(/multipv (\d+)/);
+              const moveMatch = line.match(/ pv ([a-h][1-8][a-h][1-8][qrbn]?)/);
+              
+              if (pvMatch && moveMatch) {
+                const rank = parseInt(pvMatch[1]);
+                const move = moveMatch[1];
+                let evaluation = 0;
+                let mate: number | undefined;
+                
+                const cpMatch = line.match(/score cp (-?\d+)/);
+                if (cpMatch) {
+                  evaluation = parseInt(cpMatch[1]) / 100;
+                }
+                
+                const mateMatch = line.match(/score mate (-?\d+)/);
+                if (mateMatch) {
+                  mate = parseInt(mateMatch[1]);
+                  evaluation = mate > 0 ? 100 : -100;
+                }
+                
+                // Update or insert
+                const existing = results.findIndex(r => r.rank === rank);
+                if (existing >= 0) {
+                  results[existing] = { move, evaluation, mate, rank };
+                } else {
+                  results.push({ move, evaluation, mate, rank });
+                }
+              }
+            }
+            
+            if (line.includes('bestmove')) {
+              clearTimeout(timeout);
+              this.stockfish?.stdout?.removeListener('data', dataHandler);
+              this.finishProcessing();
+              resolve(results.sort((a, b) => a.rank - b.rank).map(({ rank, ...rest }) => rest));
+            }
+          }
+        };
+
+        this.stockfish.stdout.on('data', dataHandler);
+        
+        const config = this.getEngineConfig(elo);
+        this.stockfish.stdin.write(`setoption name Skill Level value ${config.sfSkillLevel}\n`);
+        this.stockfish.stdin.write(`setoption name UCI_LimitStrength value ${config.uciLimitStrength}\n`);
+        this.stockfish.stdin.write(`setoption name UCI_Elo value ${config.uciElo}\n`);
+        this.stockfish.stdin.write(`setoption name MultiPV value ${count}\n`);
+        this.stockfish.stdin.write(`position fen ${fen}\n`);
+        // For suggestions, always use reasonable depth so we get good move candidates
+        const suggestDepth = config.depth > 0 ? Math.max(config.depth, 8) : 12;
+        this.stockfish.stdin.write(`go depth ${suggestDepth}\n`);
       };
 
       this.queue.push({ resolve, reject, command });

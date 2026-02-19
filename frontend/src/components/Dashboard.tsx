@@ -16,8 +16,11 @@ export function Dashboard() {
   const [loadingAvailable, setLoadingAvailable] = useState(false);
   const [activeTab, setActiveTab] = useState<'new-game' | 'lobby' | 'my-games'>('lobby');
   const [gameType, setGameType] = useState<'vs_stockfish' | 'vs_player'>('vs_stockfish');
-  const [skillLevel, setSkillLevel] = useState(() => {
-    return parseInt(localStorage.getItem('stockfishSkillLevel') || '10');
+  const [elo, setElo] = useState(() => {
+    return parseInt(localStorage.getItem('stockfishElo') || '1500');
+  });
+  const [assistedMode, setAssistedMode] = useState(() => {
+    return localStorage.getItem('assistedMode') === 'true';
   });
 
   useEffect(() => {
@@ -86,7 +89,7 @@ export function Dashboard() {
     try {
       const newGame = await api.createGame(gameType);
       if (gameType === 'vs_stockfish') {
-        localStorage.setItem('stockfishSkillLevel', skillLevel.toString());
+        localStorage.setItem('stockfishElo', elo.toString());
       }
       navigate(`/game/${newGame.id}`);
     } catch (error) {
@@ -138,9 +141,14 @@ export function Dashboard() {
     }
   };
 
-  const handleSkillChange = (value: number) => {
-    setSkillLevel(value);
-    localStorage.setItem('stockfishSkillLevel', value.toString());
+  const handleEloChange = (value: number) => {
+    setElo(value);
+    localStorage.setItem('stockfishElo', value.toString());
+  };
+
+  const handleAssistedModeChange = (enabled: boolean) => {
+    setAssistedMode(enabled);
+    localStorage.setItem('assistedMode', enabled.toString());
   };
 
   const getStatusBadge = (status: string) => {
@@ -161,11 +169,14 @@ export function Dashboard() {
     }
   };
 
-  const getSkillDescription = (level: number) => {
-    if (level <= 5) return 'Anfänger';
-    if (level <= 10) return 'Fortgeschritten';
-    if (level <= 15) return 'Experte';
-    return 'Meister';
+  const getEloDescription = (elo: number) => {
+    if (elo <= 800) return 'Anfänger';
+    if (elo <= 1200) return 'Gelegenheitsspieler';
+    if (elo <= 1500) return 'Fortgeschritten';
+    if (elo <= 1800) return 'Clubspieler';
+    if (elo <= 2200) return 'Experte';
+    if (elo <= 2500) return 'Meister';
+    return 'Großmeister';
   };
 
   return (
@@ -235,20 +246,40 @@ export function Dashboard() {
             {gameType === 'vs_stockfish' && (
               <div className="skill-selector">
                 <label>
-                  <strong>Stockfish Schwierigkeit:</strong> {skillLevel} - {getSkillDescription(skillLevel)}
+                  <strong>Stockfish Elo:</strong> {elo} - {getEloDescription(elo)}
                 </label>
                 <input
                   type="range"
-                  min="1"
-                  max="20"
-                  value={skillLevel}
-                  onChange={(e) => handleSkillChange(parseInt(e.target.value))}
+                  min="500"
+                  max="3200"
+                  step="50"
+                  value={elo}
+                  onChange={(e) => handleEloChange(parseInt(e.target.value))}
                   className="skill-slider"
                 />
                 <div className="skill-labels">
-                  <span>1 (Leicht)</span>
-                  <span>10 (Mittel)</span>
-                  <span>20 (Sehr schwer)</span>
+                  <span>500</span>
+                  <span>1500</span>
+                  <span>3200</span>
+                </div>
+
+                <div className="assisted-mode-toggle">
+                  <label className="toggle-label">
+                    <input
+                      type="checkbox"
+                      checked={assistedMode}
+                      onChange={(e) => handleAssistedModeChange(e.target.checked)}
+                    />
+                    <span className="toggle-text">
+                      🎯 <strong>Assisted Mode</strong>
+                    </span>
+                  </label>
+                  <p className="assisted-mode-description">
+                    Zeigt die besten 3 Züge farblich an: 
+                    <span className="color-hint green">● Bester</span>
+                    <span className="color-hint orange">● Zweitbester</span>
+                    <span className="color-hint yellow">● Drittbester</span>
+                  </p>
                 </div>
               </div>
             )}

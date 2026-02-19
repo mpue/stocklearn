@@ -156,12 +156,12 @@ export const api = {
   },
 
   async makeMove(gameId: string, from: string, to: string, promotion?: string): Promise<MoveResponse> {
-    const skillLevel = parseInt(localStorage.getItem('stockfishSkillLevel') || '10');
+    const elo = parseInt(localStorage.getItem('stockfishElo') || '1500');
     
     const response = await fetch(`${API_URL}/api/games/${gameId}/move`, {
       method: 'POST',
       headers: getAuthHeaders(),
-      body: JSON.stringify({ from, to, promotion, skillLevel }),
+      body: JSON.stringify({ from, to, promotion, elo }),
     });
     
     if (!response.ok) {
@@ -205,6 +205,20 @@ export const api = {
     
     if (!response.ok) {
       throw new Error('Failed to resign game');
+    }
+    
+    return response.json();
+  },
+
+  async getSuggestedMoves(fen: string, elo: number = 1500, count: number = 3): Promise<{ moves: Array<{ move: string; evaluation: number; mate?: number }> }> {
+    const response = await fetch(`${API_URL}/api/games/suggest-moves`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ fen, elo, count }),
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to get suggested moves');
     }
     
     return response.json();
