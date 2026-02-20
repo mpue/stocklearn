@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api, Game } from '../api/client';
@@ -23,45 +23,7 @@ export function Dashboard() {
     return localStorage.getItem('assistedMode') === 'true';
   });
 
-  useEffect(() => {
-    loadGames();
-  }, []);
-
-  useEffect(() => {
-    // Reload when navigating back to dashboard
-    if (location.pathname === '/') {
-      loadGames();
-      if (gameType === 'vs_player') {
-        loadAvailableGames();
-      }
-    }
-  }, [location.key, gameType]);
-
-  useEffect(() => {
-    // Reload games when window gets focus (user returns from game)
-    const handleFocus = () => {
-      loadGames();
-      if (gameType === 'vs_player') {
-        loadAvailableGames();
-      }
-    };
-    
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, [gameType]);
-
-  useEffect(() => {
-    if (gameType === 'vs_player') {
-      loadAvailableGames();
-      // Refresh available games every 5 seconds
-      const interval = setInterval(loadAvailableGames, 5000);
-      return () => clearInterval(interval);
-    } else {
-      setAvailableGames([]);
-    }
-  }, [gameType]);
-
-  const loadGames = async () => {
+  const loadGames = useCallback(async () => {
     try {
       setLoading(true);
       const gamesData = await api.getGames();
@@ -71,9 +33,9 @@ export function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const loadAvailableGames = async () => {
+  const loadAvailableGames = useCallback(async () => {
     try {
       setLoadingAvailable(true);
       const available = await api.getAvailableGames();
@@ -83,7 +45,49 @@ export function Dashboard() {
     } finally {
       setLoadingAvailable(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    console.log('[Dashboard] Initial mount, loading games');
+    loadGames();
+  }, [loadGames]);
+
+  useEffect(() => {
+    // Reload when navigating back to dashboard
+    console.log('[Dashboard] Location changed, pathname:', location.pathname);
+    if (location.pathname === '/') {
+      loadGames();
+      if (gameType === 'vs_player') {
+        loadAvailableGames();
+      }
+    }
+  }, [location.pathname, gameType, loadGames, loadAvailableGames]);
+
+  useEffect(() => {
+    // Reload games when window gets focus (user returns from game)
+    const handleFocus = () => {
+      console.log('[Dashboard] Window focused, reloading games');
+      loadGames();
+      if (gameType === 'vs_player') {
+        loadAvailableGames();
+      }
+    };
+    
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [gameType, loadGames, loadAvailableGames]);
+
+  useEffect(() => {
+    console.log('[Dashboard] Game type changed to:', gameType);
+    if (gameType === 'vs_player') {
+      loadAvailableGames();
+      // Refresh available games every 5 seconds
+      const interval = setInterval(loadAvailableGames, 5000);
+      return () => clearInterval(interval);
+    } else {
+      setAvailableGames([]);
+    }
+  }, [gameType, loadAvailableGames]);
 
   const startNewGame = async () => {
     try {

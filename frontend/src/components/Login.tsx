@@ -11,7 +11,11 @@ export function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
-  const [useMagicLink, setUseMagicLink] = useState(true);
+  const [useMagicLink, setUseMagicLink] = useState(() => {
+    // Lade den letzten gewählten Login-Modus aus dem localStorage
+    const saved = localStorage.getItem('loginMode');
+    return saved === 'magic' ? true : false; // Standard: Passwort-Login
+  });
 
   const handleMagicLinkSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -105,7 +109,10 @@ export function Login() {
           borderRadius: '8px'
         }}>
           <button
-            onClick={() => setUseMagicLink(true)}
+            onClick={() => {
+              setUseMagicLink(true);
+              localStorage.setItem('loginMode', 'magic');
+            }}
             style={{
               flex: 1,
               padding: '10px',
@@ -122,7 +129,10 @@ export function Login() {
             🪄 Magic Link
           </button>
           <button
-            onClick={() => setUseMagicLink(false)}
+            onClick={() => {
+              setUseMagicLink(false);
+              localStorage.setItem('loginMode', 'password');
+            }}
             style={{
               flex: 1,
               padding: '10px',

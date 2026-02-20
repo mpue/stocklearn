@@ -125,7 +125,9 @@ export const api = {
     });
     
     if (!response.ok) {
-      throw new Error('Failed to fetch current user');
+      const error: any = new Error('Failed to fetch current user');
+      error.status = response.status;
+      throw error;
     }
     
     return response.json();

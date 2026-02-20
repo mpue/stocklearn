@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Chess, Square } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
@@ -97,11 +97,78 @@ export function ChessGame() {
     return { captured, materialAdvantage };
   };
 
+  const loadGame = useCallback(async (id: string) => {
+    try {
+      console.log('[ChessGame] Loading game:', id);
+      setStatus('Lade Spiel...');
+      const loadedGame = await api.getGame(id);
+      setGameId(id);
+      setGameData(loadedGame);
+      const chess = new Chess(loadedGame.fen);
+      setGame(chess);
+      
+      if (loadedGame.moves && loadedGame.moves.length > 0) {
+        const history = loadedGame.moves
+          .sort((a, b) => a.moveNumber - b.moveNumber)
+          .map(m => m.san);
+        setMoveHistory(history);
+        
+        // Letzten Zug setzen
+        const sortedMoves = loadedGame.moves.sort((a, b) => a.moveNumber - b.moveNumber);
+        const lastMoveData = sortedMoves[sortedMoves.length - 1];
+        setLastMove({ 
+          from: lastMoveData.from as Square, 
+          to: lastMoveData.to as Square 
+        });
+      }
+      
+      setGameStatus(loadedGame.status);
+      
+      // Status basierend auf gameType setzen
+      if (loadedGame.status === 'waiting') {
+        setStatus('Wartet auf einen Gegner...');
+      } else if (loadedGame.status === 'active') {
+        if (loadedGame.gameType === 'vs_player') {
+          const isWhite = loadedGame.whitePlayer?.id === user?.id;
+          const isBlack = loadedGame.blackPlayer?.id === user?.id;
+          const isMyTurn = (chess.turn() === 'w' && isWhite) || (chess.turn() === 'b' && isBlack);
+          
+          if (isMyTurn) {
+            setStatus(chess.isCheck() ? 'Schach! Dein Zug!' : 'Dein Zug!');
+          } else {
+            const opponentName = isWhite 
+              ? loadedGame.blackPlayer?.username 
+              : loadedGame.whitePlayer?.username;
+            setStatus(`${opponentName} ist am Zug...`);
+          }
+        } else {
+          setStatus(chess.turn() === 'w' ? 'Dein Zug!' : 'Stockfish ist am Zug...');
+        }
+      } else if (loadedGame.status === 'checkmate') {
+        if (loadedGame.gameType === 'vs_player') {
+          const winner = chess.turn() === 'w' 
+            ? loadedGame.blackPlayer?.username 
+            : loadedGame.whitePlayer?.username;
+          setStatus(`Schachmatt! ${winner} gewinnt!`);
+        } else {
+          setStatus(chess.turn() === 'w' ? 'Schachmatt! Stockfish gewinnt!' : 'Schachmatt! Du gewinnst!');
+        }
+      } else {
+        setStatus('Spiel beendet: ' + loadedGame.status);
+      }
+      console.log('[ChessGame] Game loaded successfully');
+    } catch (error) {
+      console.error('[ChessGame] Error loading game:', error);
+      setStatus('Fehler beim Laden des Spiels');
+    }
+  }, [user?.id]);
+
   useEffect(() => {
+    console.log('[ChessGame] urlGameId changed:', urlGameId);
     if (urlGameId) {
       loadGame(urlGameId);
     }
-  }, [urlGameId]);
+  }, [urlGameId, loadGame]);
 
   // WebSocket: Join game room
   useEffect(() => {
@@ -191,72 +258,9 @@ export function ChessGame() {
     };
   }, [socket, gameId, user?.id]);
 
-  const loadGame = async (id: string) => {
-    try {
-      setStatus('Lade Spiel...');
-      const loadedGame = await api.getGame(id);
-      setGameId(id);
-      setGameData(loadedGame);
-      const chess = new Chess(loadedGame.fen);
-      setGame(chess);
-      
-      if (loadedGame.moves && loadedGame.moves.length > 0) {
-        const history = loadedGame.moves
-          .sort((a, b) => a.moveNumber - b.moveNumber)
-          .map(m => m.san);
-        setMoveHistory(history);
-        
-        // Letzten Zug setzen
-        const sortedMoves = loadedGame.moves.sort((a, b) => a.moveNumber - b.moveNumber);
-        const lastMoveData = sortedMoves[sortedMoves.length - 1];
-        setLastMove({ 
-          from: lastMoveData.from as Square, 
-          to: lastMoveData.to as Square 
-        });
-      }
-      
-      setGameStatus(loadedGame.status);
-      
-      // Status basierend auf gameType setzen
-      if (loadedGame.status === 'waiting') {
-        setStatus('Wartet auf einen Gegner...');
-      } else if (loadedGame.status === 'active') {
-        if (loadedGame.gameType === 'vs_player') {
-          const isWhite = loadedGame.whitePlayer?.id === user?.id;
-          const isBlack = loadedGame.blackPlayer?.id === user?.id;
-          const isMyTurn = (chess.turn() === 'w' && isWhite) || (chess.turn() === 'b' && isBlack);
-          
-          if (isMyTurn) {
-            setStatus(chess.isCheck() ? 'Schach! Dein Zug!' : 'Dein Zug!');
-          } else {
-            const opponentName = isWhite 
-              ? loadedGame.blackPlayer?.username 
-              : loadedGame.whitePlayer?.username;
-            setStatus(`${opponentName} ist am Zug...`);
-          }
-        } else {
-          setStatus(chess.turn() === 'w' ? 'Dein Zug!' : 'Stockfish ist am Zug...');
-        }
-      } else if (loadedGame.status === 'checkmate') {
-        if (loadedGame.gameType === 'vs_player') {
-          const winner = chess.turn() === 'w' 
-            ? loadedGame.blackPlayer?.username 
-            : loadedGame.whitePlayer?.username;
-          setStatus(`Schachmatt! ${winner} gewinnt!`);
-        } else {
-          setStatus(chess.turn() === 'w' ? 'Schachmatt! Stockfish gewinnt!' : 'Schachmatt! Du gewinnst!');
-        }
-      } else {
-        setStatus('Spiel beendet: ' + loadedGame.status);
-      }
-    } catch (error) {
-      console.error('Error loading game:', error);
-      setStatus('Fehler beim Laden des Spiels');
-    }
-  };
-
   const startNewGame = async () => {
     try {
+      console.log('[ChessGame] Starting new game...');
       setStatus('Neues Spiel wird erstellt...');
       const newGame = await api.createGame();
       setGameId(newGame.id);
@@ -268,8 +272,9 @@ export function ChessGame() {
       setStatus('Dein Zug! Spiele mit Weiß gegen Stockfish.');
       // Update URL
       navigate(`/game/${newGame.id}`, { replace: true });
+      console.log('[ChessGame] New game created:', newGame.id);
     } catch (error) {
-      console.error('Error starting new game:', error);
+      console.error('[ChessGame] Error starting new game:', error);
       setStatus('Fehler beim Erstellen des Spiels');
     }
   };

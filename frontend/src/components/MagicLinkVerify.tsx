@@ -6,14 +6,31 @@ import './Auth.css';
 export function MagicLinkVerify() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { verifyMagicLink } = useAuth();
+  const auth = useAuth();
   const [status, setStatus] = useState<'verifying' | 'success' | 'error'>('verifying');
   const [error, setError] = useState('');
+  const [hasVerified, setHasVerified] = useState(false);
 
   useEffect(() => {
+    // Verhindere mehrfache Verifikation
+    if (hasVerified) {
+      console.log('[MagicLinkVerify] Already verified, skipping');
+      return;
+    }
+
+    if (!auth) {
+      console.error('[MagicLinkVerify] Auth context not available');
+      setStatus('error');
+      setError('Auth context nicht verfügbar. Bitte Seite neu laden.');
+      return;
+    }
+
     const token = searchParams.get('token');
 
+    console.log('[MagicLinkVerify] Mounted, token exists:', !!token);
+
     if (!token) {
+      console.error('[MagicLinkVerify] No token found in URL');
       setStatus('error');
       setError('Kein Token gefunden. Der Link ist ungültig.');
       return;
@@ -21,19 +38,31 @@ export function MagicLinkVerify() {
 
     const verify = async () => {
       try {
-        await verifyMagicLink(token);
+        console.log('[MagicLinkVerify] Attempting to verify token...');
+        setHasVerified(true);
+        await auth.verifyMagicLink(token);
+        console.log('[MagicLinkVerify] Token verified successfully');
         setStatus('success');
         setTimeout(() => {
-          navigate('/');
+          console.log('[MagicLinkVerify] Redirecting to dashboard...');
+          navigate('/', { replace: true });
         }, 2000);
       } catch (err: any) {
+        console.error('[MagicLinkVerify] Token verification failed:', err);
         setStatus('error');
         setError(err.message || 'Der Magic Link ist ungültig oder abgelaufen.');
       }
     };
 
     verify();
-  }, [searchParams, verifyMagicLink, navigate]);
+  }, [searchParams, auth, navigate, hasVerified]);
+
+  console.log('Rendering MagicLinkVerify, status:', status);
+
+  // Fallback für den Fall, dass nichts anderes rendert
+  if (!status) {
+    return <div>Loading...</div>;
+  }
 
   return (
     <div className="auth-container">

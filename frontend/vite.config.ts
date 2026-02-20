@@ -13,6 +13,18 @@ export default defineConfig({
     allowedHosts: allowedHosts.length > 0 ? allowedHosts : undefined,
     watch: {
       usePolling: true
-    }
+    },
+    // Wichtig für React Router über Reverse Proxy
+    strictPort: true,
+    // HMR nur für Production-Domain konfigurieren, nicht lokal
+    hmr: process.env.NODE_ENV === 'production' ? {
+      clientPort: 443,
+      host: 'chess.cflux.org'
+    } : true
+  },
+  preview: {
+    host: '0.0.0.0',
+    port: 3005,
+    strictPort: true
   }
 })
